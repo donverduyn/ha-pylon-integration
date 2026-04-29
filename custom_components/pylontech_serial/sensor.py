@@ -87,7 +87,8 @@ async def async_setup_entry(
     entities.append(PylontechSystemSensor(
         coordinator, unique_id_prefix, "sys_raw", 
         None, None, "raw",
-        entity_category=EntityCategory.DIAGNOSTIC
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False
     ))
 
     # Info Sensors (Diagnostic)
@@ -115,7 +116,7 @@ async def async_setup_entry(
             entities.append(PylontechBatterySensor(coordinator, unique_id_prefix, bat_id, "status", None, None, "status"))
             
             # Diagnostic
-            entities.append(PylontechBatterySensor(coordinator, unique_id_prefix, bat_id, "raw", None, None, "raw", entity_category=EntityCategory.DIAGNOSTIC))
+            entities.append(PylontechBatterySensor(coordinator, unique_id_prefix, bat_id, "raw", None, None, "raw", entity_category=EntityCategory.DIAGNOSTIC, entity_registry_enabled_default=False))
 
     async_add_entities(entities)
 
@@ -123,13 +124,14 @@ async def async_setup_entry(
 class PylontechSystemSensor(PylontechSystemEntity, SensorEntity):
     """Representation of a System-wide Sensor."""
 
-    def __init__(self, coordinator, unique_id_prefix, key, unit, device_class, attr_name, state_class=None, entity_category=None):
+    def __init__(self, coordinator, unique_id_prefix, key, unit, device_class, attr_name, state_class=None, entity_category=None, entity_registry_enabled_default=True):
         super().__init__(coordinator)
         self._attribute_key = attr_name # field name in struct
         self._unit = unit
         self._device_class = device_class
         self._attr_state_class = state_class
         self._attr_entity_category = entity_category
+        self._attr_entity_registry_enabled_default = entity_registry_enabled_default
         
         self._attr_unique_id = f"{unique_id_prefix}_{key}"
         self._attr_translation_key = key
@@ -160,12 +162,13 @@ class PylontechSystemSensor(PylontechSystemEntity, SensorEntity):
 class PylontechBatterySensor(PylontechBatteryEntity, SensorEntity):
     """Representation of a Per-Battery Sensor."""
 
-    def __init__(self, coordinator, unique_id_prefix, bat_id, suffix, unit, device_class, attr_name, entity_category=None):
+    def __init__(self, coordinator, unique_id_prefix, bat_id, suffix, unit, device_class, attr_name, entity_category=None, entity_registry_enabled_default=True):
         super().__init__(coordinator, bat_id)
         self._attribute_key = attr_name
         self._unit = unit
         self._device_class = device_class
         self._attr_entity_category = entity_category
+        self._attr_entity_registry_enabled_default = entity_registry_enabled_default
         
         self._attr_unique_id = f"{unique_id_prefix}_bat{bat_id}_{suffix}"
         self._attr_translation_key = f"bat_{suffix}"
