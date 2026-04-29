@@ -51,7 +51,8 @@ class PylontechParser:
                         soc=soc,
                         status=status,
                         power=power,
-                        raw=line.strip()
+                        raw=line.strip(),
+                        energy_stored=0.0
                     )
                     batteries.append(bat)
                     
