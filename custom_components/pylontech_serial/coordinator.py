@@ -46,6 +46,25 @@ class PylontechCoordinator(DataUpdateCoordinator):
         elif not self.serial.is_open:
              self.serial.open()
 
+    def _get_ready_serial(self):
+        """Return a ready serial handle, reopening if the underlying fd is invalid."""
+        self._open_serial()
+        ser = self.serial
+        if ser is None:
+            raise UpdateFailed("Could not open serial port")
+
+        # serialx may keep an object around with a missing POSIX fd after disconnects.
+        if not ser.is_open or getattr(ser, "_fileno", 1) is None:
+            _LOGGER.debug("Serial handle not ready, reopening %s", self.port)
+            self._close_serial()
+            self._open_serial()
+            ser = self.serial
+
+        if ser is None or not ser.is_open or getattr(ser, "_fileno", 1) is None:
+            raise serialx.SerialException(f"Serial port {self.port} not ready")
+
+        return ser
+
     def _close_serial(self):
         if self.serial:
             try:
@@ -70,10 +89,7 @@ class PylontechCoordinator(DataUpdateCoordinator):
         """Read device info once."""
         with self._lock:
             try:
-                self._open_serial()
-                ser = self.serial
-                if ser is None:
-                    raise UpdateFailed("Could not open serial port")
+                ser = self._get_ready_serial()
 
                 ser.reset_read_buffer()
                 ser.write(b"\n")
@@ -105,6 +121,8 @@ class PylontechCoordinator(DataUpdateCoordinator):
                 
                 _LOGGER.info(f"Parsed device info: Model={temp_sys.model}, Ver={temp_sys.fw_version}")
 
+            except (OSError, serialx.SerialException, AssertionError) as e:
+                _LOGGER.warning(f"Failed to fetch device info due to serial error: {e}")
             except Exception as e:
                 _LOGGER.warning(f"Failed to fetch device info: {e}")
             finally:
@@ -115,10 +133,7 @@ class PylontechCoordinator(DataUpdateCoordinator):
         """Read data from serial synchronously."""
         with self._lock:
             try:
-                self._open_serial()
-                ser = self.serial
-                if ser is None:
-                    raise UpdateFailed("Could not open serial port")
+                ser = self._get_ready_serial()
                 
                 ser.reset_read_buffer()
                 ser.write(b"\n")
@@ -199,7 +214,7 @@ class PylontechCoordinator(DataUpdateCoordinator):
 
                 return system
 
-            except (OSError, serialx.SerialException) as e:
+            except (OSError, serialx.SerialException, AssertionError) as e:
                 self._close_serial()
                 raise UpdateFailed(f"Serial Error: {e}")
             except UpdateFailed:
@@ -236,10 +251,7 @@ class PylontechCoordinator(DataUpdateCoordinator):
     def send_raw_command(self, command: str):
         with self._lock:
             try:
-                self._open_serial()
-                ser = self.serial
-                if ser is None:
-                    raise UpdateFailed("Could not open serial port")
+                ser = self._get_ready_serial()
 
                 ser.reset_read_buffer()
                 ser.write(b"\n")
@@ -248,6 +260,9 @@ class PylontechCoordinator(DataUpdateCoordinator):
                 ser.write(cmd_bytes)
                 time.sleep(0.5)
                 return ser.readall().decode('ascii', errors='ignore')
+            except (OSError, serialx.SerialException, AssertionError) as e:
+                _LOGGER.error(f"Serial error sending raw command: {e}")
+                raise UpdateFailed(f"Serial error: {e}")
             except Exception as e:
                 _LOGGER.error(f"Error sending raw command: {e}")
                 raise e
