@@ -1,7 +1,7 @@
 {
   "domain": "pylontech_mqtt",
   "name": "Pylontech MQTT",
-  "codeowners": [],
+  "codeowners": ["@donverduyn"],
   "config_flow": true,
   "dependencies": [],
   "documentation": "https://github.com/donverduyn/ha-pylontech-mqtt",

@@ -69,3 +69,17 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator: PylontechCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
         await hass.async_add_executor_job(coordinator.shutdown)
     return unload_ok
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Migrate an old config entry to the current schema version.
+
+    Currently a no-op placeholder — ConfigFlow.VERSION is still 1.
+    When future schema changes are introduced, migration logic goes here.
+    """
+    _LOGGER.debug(
+        "Migrating config entry from version %s.%s",
+        entry.version,
+        entry.minor_version,
+    )
+    return True
