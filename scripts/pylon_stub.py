@@ -20,7 +20,7 @@ Usage
 
 Protocol parity
 ---------------
-The stub responds to every command documented in docs.md:
+The stub responds to every command documented in docs/docs.md:
   pwr           – power table (all slots, present + Absent rows)
   info          – device information
   stat          – full statistics (18 counters, cycles, coulombs …)
