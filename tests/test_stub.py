@@ -967,6 +967,7 @@ class TestStubMultiGroup:
 # 12. bat_id < 1 — lower-bound OOB paths not covered by the > max tests
 # ===========================================================================
 
+
 class TestStubBatIdBelowOne:
     """bat_id = 0 exercises the `bat_id < 1` branch in pwr N, bat N, soh N."""
 
@@ -987,6 +988,7 @@ class TestStubBatIdBelowOne:
 # 13. pwr with non-integer argument — ValueError catch → tabular fallback
 # ===========================================================================
 
+
 class TestStubPwrNonIntegerArg:
     def test_pwr_noninteger_arg_falls_back_to_tabular(self, stub_conn):
         """pwr badarg catches ValueError; bat_id_filter stays None so the full
@@ -1003,6 +1005,7 @@ class TestStubPwrNonIntegerArg:
 # ===========================================================================
 # 14. stub sub-command with missing required argument → usage
 # ===========================================================================
+
 
 class TestStubMissingArgUsage:
     """Each sub-command needs at least one extra argument; omitting it must
@@ -1036,6 +1039,7 @@ class TestStubMissingArgUsage:
 # ===========================================================================
 # 15. _base_state "Idle" and "Dischg" paths
 # ===========================================================================
+
 
 class TestStubBaseState:
     """Verify the three _base_state branches: Charge (default), Idle, Dischg."""
@@ -1117,6 +1121,7 @@ class TestStubBaseState:
 # 16. pwrsys charge/discharge current taper at SOC extremes
 # ===========================================================================
 
+
 class TestStubPwrsysTaper:
     """At SOC > 95 charge current is tapered to 30 %; at SOC < 10 discharge
     current is tapered.  US5000 limits: max_chg = 200 000 mA, max_dsg = 200 000 mA.
@@ -1162,6 +1167,7 @@ class TestStubPwrsysTaper:
 # ===========================================================================
 # 17. New-firmware SysAlarm.St column shows "Alarm" on injected fault
 # ===========================================================================
+
 
 class TestStubNewFirmwareFaultInjection:
     """Verify the per-row SysAlarm.St column in the new-firmware pwr table

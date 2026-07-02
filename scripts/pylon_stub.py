@@ -288,6 +288,7 @@ def _resp_pwr_indexed(cmd: str, bat_id: int) -> bytes:
         sys_fault_bits = "0x1" if fault and fault != "absent" else "0x0"
         # Raw values pushed past threshold so telemetry-driven monitors also fire
         disp_voltage = s["voltage"]
+        disp_current = s["current"]
         disp_temp = s["temperature"]
         if fault == "ov":
             disp_voltage = 3870 * m["cells"]  # ~3.87 V/cell, above typical OV threshold
@@ -297,12 +298,16 @@ def _resp_pwr_indexed(cmd: str, bat_id: int) -> bytes:
             disp_temp = 55000  # 55 °C, above typical OT threshold
         elif fault == "ut":
             disp_temp = -10000  # -10 °C, below typical UT threshold
+        elif fault == "oc":
+            disp_current = (
+                -150000 if s["current"] < 0 else 150000
+            )  # fits 8-char kv field
         lines = [
             SEP,
             f"Power {bat_id}",
             kv("Voltage", disp_voltage, "mV"),
             kv("SOC Voltage", "0", "mV"),
-            kv("Current", s["current"], "mA"),
+            kv("Current", disp_current, "mA"),
             kv("Temperature", disp_temp, "mC"),
             kv("Coulomb", s["soc"], "%"),
             kv("Total Coulomb", m["cap_mah"], "mAH"),
@@ -433,7 +438,9 @@ def _resp_pwr(cmd: str) -> bytes:
                     dt = -10000
                     dtl = -10000
                 elif fault == "oc":
-                    dc = -150000 if s["current"] < 0 else 150000
+                    dc = (
+                        -99999 if s["current"] < 0 else 99999
+                    )  # −99999 is 6 chars, fits 7-char column
 
                 if firmware == "new":
                     rows.append(
@@ -604,7 +611,7 @@ def _resp_bat(cmd: str) -> bytes:
     if not present or fault == "absent":
         return _wrap(cmd, f"Battery {bat_id}\r\r\nAbsent")
 
-    st = "Charge" if s["charging"] else "Dischg"
+    st = _base_state(s["current"])
 
     cell_volt_st = "OV" if fault == "ov" else "UV" if fault == "uv" else "Normal"
     cell_curr_st = "OC" if fault == "oc" else "Normal"
@@ -907,7 +914,7 @@ def _resp_stub(cmd: str) -> bytes:
     if len(parts) < 2:
         return _wrap(
             cmd,
-            "Usage: stub fault <bat> <ov|uv|ot|ut|oc|absent> | stub clear <bat> | stub soc <pct> | stub current <mA>",
+            "Usage: stub fault <bat> <ov|uv|ot|ut|oc|absent> | stub clear <bat> | stub soc <pct> | stub current <mA|auto>",
             kv=True,
         )
     sub = parts[1].lower()
