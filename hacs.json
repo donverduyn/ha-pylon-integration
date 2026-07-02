@@ -1,5 +1,5 @@
 {
-    "name": "Pylontech Serial",
+    "name": "Pylontech MQTT",
     "render_readme": true,
     "homeassistant": "2024.1.0"
 }

@@ -83,9 +83,6 @@
       "sys_volt": {
         "name": "Voltage"
       },
-      "bat_cycles": {
-        "name": "Cycles"
-      },
       "bat_energy_stored": {
         "name": "Stored Energy"
       },
@@ -100,9 +97,6 @@
       },
       "bat_soc": {
         "name": "SOC"
-      },
-      "bat_soh": {
-        "name": "SOH"
       },
       "bat_status": {
         "name": "Status"
@@ -166,6 +160,9 @@
       },
       "sys_discharge_cnt": {
         "name": "Discharge Count"
+      },
+      "sys_idle_times": {
+        "name": "Idle Count"
       },
       "sys_sc_times": {
         "name": "Short Circuit Events"

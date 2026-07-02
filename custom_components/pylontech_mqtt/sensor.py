@@ -104,6 +104,11 @@ SYSTEM_SENSORS: tuple[SensorEntityDescription, ...] = (
         translation_key="sys_discharge_cnt",
         state_class=SensorStateClass.MEASUREMENT,
     ),
+    SensorEntityDescription(
+        key="idle_times",
+        translation_key="sys_idle_times",
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
     # --- Device info (diagnostic) ---
     SensorEntityDescription(
         key="cell_count",
