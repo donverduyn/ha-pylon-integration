@@ -357,9 +357,7 @@ class PylontechParser:
             '48V/74AH'  -> 3.55
             '48V/50AH'  -> 2.4
         """
-        m = re.search(
-            r"(\d+(?:\.\d+)?)\s*[Vv]\s*/\s*(\d+(?:\.\d+)?)\s*[Aa][Hh]", spec
-        )
+        m = re.search(r"(\d+(?:\.\d+)?)\s*[Vv]\s*/\s*(\d+(?:\.\d+)?)\s*[Aa][Hh]", spec)
         if not m:
             return None
         return round(float(m.group(1)) * float(m.group(2)) / 1000.0, 2)

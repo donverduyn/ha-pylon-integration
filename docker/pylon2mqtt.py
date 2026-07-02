@@ -68,7 +68,9 @@ def _int_env(name: str, default: int) -> int:
     except ValueError:
         _LOGGER.error(
             "Invalid value for %s=%r (expected integer) — using default %d",
-            name, raw, default,
+            name,
+            raw,
+            default,
         )
         return default
 

@@ -5,10 +5,9 @@ import time
 
 import paho.mqtt.client as mqtt
 import voluptuous as vol
-from paho.mqtt.enums import CallbackAPIVersion
-
 from homeassistant import config_entries
 from homeassistant.core import callback
+from paho.mqtt.enums import CallbackAPIVersion
 
 from .const import (
     CONF_MQTT_HOST,
@@ -73,7 +72,9 @@ def _broker_schema(
     return vol.Schema(
         {
             vol.Required(CONF_MQTT_HOST, default=default_host): str,
-            vol.Required(CONF_MQTT_PORT, default=default_port): vol.All(int, vol.Range(min=1, max=65535)),
+            vol.Required(CONF_MQTT_PORT, default=default_port): vol.All(
+                int, vol.Range(min=1, max=65535)
+            ),
             vol.Optional(CONF_MQTT_USER, default=default_user): str,
             vol.Optional(CONF_MQTT_PASS, default=default_pass): str,
             vol.Required(CONF_MQTT_TOPIC, default=default_topic): str,

@@ -15,6 +15,6 @@ DEFAULT_MQTT_TOPIC = "pylontech/stack"
 DEFAULT_BATTERY_CAPACITY = 2.4  # kWh — US2000 fallback when spec cannot be parsed
 # Reference capacities per known model; the integration auto-derives these at
 # runtime from the BMS spec string via PylontechParser.parse_spec_capacity().
-BATTERY_CAPACITY_US2000 = 2.40   # 48 V × 50 Ah
-BATTERY_CAPACITY_US3000 = 3.55   # 48 V × 74 Ah
-BATTERY_CAPACITY_US5000 = 4.80   # 48 V × 100 Ah
+BATTERY_CAPACITY_US2000 = 2.40  # 48 V × 50 Ah
+BATTERY_CAPACITY_US3000 = 3.55  # 48 V × 74 Ah
+BATTERY_CAPACITY_US5000 = 4.80  # 48 V × 100 Ah

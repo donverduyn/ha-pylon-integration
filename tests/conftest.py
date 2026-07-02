@@ -33,6 +33,7 @@ def _enable_sockets() -> None:
     """Re-enable real TCP sockets (no-op when pytest-socket is not installed)."""
     try:
         import pytest_socket as _ps  # installed by pytest-homeassistant-custom-component
+
         _ps.enable_socket()
     except ImportError:
         pass
@@ -54,6 +55,7 @@ def _restore_sockets_per_test() -> None:
 def hass_config_dir() -> str:
     """Return the project root as HA's config directory."""
     return str(_ROOT)
+
 
 # Register a namespace package so relative imports inside the module files work
 _pkg = types.ModuleType("pylontech_mqtt")

@@ -81,6 +81,7 @@ def _wait_port(host: str, port: int, timeout: float = 5.0) -> None:
 def new_fw_stub():
     """Stub with --firmware new (23-column layout, *.Id columns present)."""
     from conftest import _enable_sockets
+
     _enable_sockets()
     proc = _spawn_stub(_NEW_FW_PORT, "--firmware", "new")
     try:
@@ -95,6 +96,7 @@ def new_fw_stub():
 def multi_grp_stub():
     """Stub with --groups 2 (LV-HUB topology, two parallel battery groups)."""
     from conftest import _enable_sockets
+
     _enable_sockets()
     proc = _spawn_stub(_MULTI_GRP_PORT, "--groups", "2", "--firmware", "old")
     try:
