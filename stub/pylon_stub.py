@@ -47,9 +47,30 @@ import time
 # Model catalogue
 # ---------------------------------------------------------------------------
 MODELS: dict[str, dict] = {
-    "US2000": dict(device_name="US2KBPL", spec="48V/50AH", cells=15, cap_mah=50000, max_chg=102000, max_dsg=-100000),
-    "US3000": dict(device_name="US3KBPL", spec="48V/74AH", cells=15, cap_mah=74000, max_chg=150000, max_dsg=-150000),
-    "US5000": dict(device_name="US5KBPL", spec="48V/100AH", cells=15, cap_mah=100000, max_chg=200000, max_dsg=-200000),
+    "US2000": dict(
+        device_name="US2KBPL",
+        spec="48V/50AH",
+        cells=15,
+        cap_mah=50000,
+        max_chg=102000,
+        max_dsg=-100000,
+    ),
+    "US3000": dict(
+        device_name="US3KBPL",
+        spec="48V/74AH",
+        cells=15,
+        cap_mah=74000,
+        max_chg=150000,
+        max_dsg=-150000,
+    ),
+    "US5000": dict(
+        device_name="US5KBPL",
+        spec="48V/100AH",
+        cells=15,
+        cap_mah=100000,
+        max_chg=200000,
+        max_dsg=-200000,
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -143,7 +164,6 @@ def _wrap(cmd_echo: str, body: str) -> bytes:
 def _resp_pwr(cmd: str) -> bytes:
     with _state_lock:
         s = dict(_state)
-    _ = MODELS[_cfg["model"]]
     n = _cfg["batteries"]
     slots = _cfg["slots"]
     st = "Charge" if s["charging"] else "Discharge"
@@ -270,7 +290,10 @@ def _resp_bat(cmd: str) -> bytes:
     st = "Charge" if s["charging"] else "Discharge"
     curr_per_cell = abs(s["current"]) // cells
 
-    header = "Battery  Volt     Curr     Tempr    Base State   Volt. State  Curr. State  Temp. State  Coulomb     "
+    header = (
+        "Battery  Volt     Curr     Tempr    "
+        "Base State   Volt. State  Curr. State  Temp. State  Coulomb     "
+    )
     rows: list[str] = []
     for c in range(cells):
         v = s["volt_low"] + random.randint(0, s["volt_high"] - s["volt_low"])
@@ -385,8 +408,19 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    ap.add_argument("--host", default="127.0.0.1", metavar="HOST", help="Bind address (default: 127.0.0.1)")
-    ap.add_argument("--port", default=12300, type=int, metavar="PORT", help="TCP port (default: 12300)")
+    ap.add_argument(
+        "--host",
+        default="127.0.0.1",
+        metavar="HOST",
+        help="Bind address (default: 127.0.0.1)",
+    )
+    ap.add_argument(
+        "--port",
+        default=12300,
+        type=int,
+        metavar="PORT",
+        help="TCP port (default: 12300)",
+    )
     ap.add_argument(
         "--batteries",
         default=2,
@@ -409,7 +443,13 @@ def main() -> None:
         choices=list(MODELS),
         help="Battery model: US2000 | US3000 | US5000 (default: US2000)",
     )
-    ap.add_argument("--soc", default=85, type=int, metavar="PCT", help="Starting SOC %% (default: 85)")
+    ap.add_argument(
+        "--soc",
+        default=85,
+        type=int,
+        metavar="PCT",
+        help="Starting SOC %% (default: 85)",
+    )
     args = ap.parse_args()
 
     if args.batteries > args.slots:

@@ -41,11 +41,15 @@ class TestParsePwr:
 
     def test_battery_temperature_plausible(self, pwr_system):
         for bat in pwr_system.batteries:
-            assert 0 < bat.temperature < 80, f"bat {bat.sys_id}: temperature {bat.temperature} out of plausible range"
+            assert 0 < bat.temperature < 80, (
+                f"bat {bat.sys_id}: temperature {bat.temperature} out of plausible range"
+            )
 
     def test_battery_soc_within_range(self, pwr_system):
         for bat in pwr_system.batteries:
-            assert 0 <= bat.soc <= 100, f"bat {bat.sys_id}: SOC {bat.soc} out of 0-100 range"
+            assert 0 <= bat.soc <= 100, (
+                f"bat {bat.sys_id}: SOC {bat.soc} out of 0-100 range"
+            )
 
     def test_battery_soc_matches_stub_start(self, pwr_system):
         for bat in pwr_system.batteries:
@@ -54,12 +58,16 @@ class TestParsePwr:
     def test_battery_status_string(self, pwr_system):
         valid_statuses = {"Charge", "Discharge", "Idle", "Normal"}
         for bat in pwr_system.batteries:
-            assert bat.status in valid_statuses, f"bat {bat.sys_id}: unexpected status '{bat.status}'"
+            assert bat.status in valid_statuses, (
+                f"bat {bat.sys_id}: unexpected status '{bat.status}'"
+            )
 
     def test_battery_power_calculated(self, pwr_system):
         for bat in pwr_system.batteries:
             expected = round(bat.voltage * bat.current, 2)
-            assert bat.power == expected, f"bat {bat.sys_id}: power mismatch (got {bat.power}, expected {expected})"
+            assert bat.power == expected, (
+                f"bat {bat.sys_id}: power mismatch (got {bat.power}, expected {expected})"
+            )
 
     # --- Extended pwr columns (Tlow/Thigh/Vlow/Vhigh) ---
 
@@ -94,8 +102,12 @@ class TestParsePwr:
     def test_cell_volt_plausible_range(self, pwr_system):
         """LiFePO4 cells: 2.5 V (deep discharge) – 3.65 V (full)."""
         for bat in pwr_system.batteries:
-            assert 2.5 <= bat.volt_low <= 3.8, f"bat {bat.sys_id}: volt_low {bat.volt_low} outside 2.5-3.8 V"
-            assert 2.5 <= bat.volt_high <= 3.8, f"bat {bat.sys_id}: volt_high {bat.volt_high} outside 2.5-3.8 V"
+            assert 2.5 <= bat.volt_low <= 3.8, (
+                f"bat {bat.sys_id}: volt_low {bat.volt_low} outside 2.5-3.8 V"
+            )
+            assert 2.5 <= bat.volt_high <= 3.8, (
+                f"bat {bat.sys_id}: volt_high {bat.volt_high} outside 2.5-3.8 V"
+            )
 
     # --- Status string columns (Volt.St / Curr.St / Temp.St) ---
 
@@ -121,11 +133,15 @@ class TestParsePwr:
 
     def test_batt_volt_status_present(self, pwr_system):
         for bat in pwr_system.batteries:
-            assert bat.batt_volt_status is not None, f"bat {bat.sys_id}: batt_volt_status is None"
+            assert bat.batt_volt_status is not None, (
+                f"bat {bat.sys_id}: batt_volt_status is None"
+            )
 
     def test_batt_temp_status_present(self, pwr_system):
         for bat in pwr_system.batteries:
-            assert bat.batt_temp_status is not None, f"bat {bat.sys_id}: batt_temp_status is None"
+            assert bat.batt_temp_status is not None, (
+                f"bat {bat.sys_id}: batt_temp_status is None"
+            )
 
     def test_batt_status_strings_are_normal(self, pwr_system):
         for bat in pwr_system.batteries:
@@ -180,7 +196,9 @@ class TestParsePwr:
         raw = _raw_command(stub_conn, "pwr")
         # Strip the header line to simulate old firmware without it
         lines = raw.splitlines()
-        stripped = "\n".join(ln for ln in lines if not ln.strip().startswith("Power"))
+        stripped = "\n".join(
+            line for line in lines if not line.strip().startswith("Power")
+        )
         system = PylontechParser.parse_pwr(stripped)
         # Should still parse the data rows (defaults kick in)
         assert len(system.batteries) == STUB_BATTERIES
@@ -240,7 +258,11 @@ class TestParseInfo:
 
     def test_max_currents_match_model(self, info_system):
         """US5000 stub emits ±200 A limits."""
-        limits = {"US2000": (102.0, 100.0), "US3000": (150.0, 150.0), "US5000": (200.0, 200.0)}
+        limits = {
+            "US2000": (102.0, 100.0),
+            "US3000": (150.0, 150.0),
+            "US5000": (200.0, 200.0),
+        }
         chg, dsg = limits[STUB_MODEL]
         assert info_system.max_charge_curr == pytest.approx(chg, rel=1e-3)
         assert info_system.max_dischg_curr == pytest.approx(dsg, rel=1e-3)
@@ -403,7 +425,9 @@ class TestFullPollCycle:
             "dsg_cap",
         ]
         for field in required:
-            assert getattr(full_system, field) is not None, f"{field} is None after full cycle"
+            assert getattr(full_system, field) is not None, (
+                f"{field} is None after full cycle"
+            )
 
     def test_all_battery_extended_fields_populated(self, full_system):
         for bat in full_system.batteries:
@@ -414,8 +438,12 @@ class TestFullPollCycle:
             assert bat.volt_status is not None, f"bat {bat.sys_id}: volt_status None"
             assert bat.curr_status is not None, f"bat {bat.sys_id}: curr_status None"
             assert bat.temp_status is not None, f"bat {bat.sys_id}: temp_status None"
-            assert bat.batt_volt_status is not None, f"bat {bat.sys_id}: batt_volt_status None"
-            assert bat.batt_temp_status is not None, f"bat {bat.sys_id}: batt_temp_status None"
+            assert bat.batt_volt_status is not None, (
+                f"bat {bat.sys_id}: batt_volt_status None"
+            )
+            assert bat.batt_temp_status is not None, (
+                f"bat {bat.sys_id}: batt_temp_status None"
+            )
 
 
 # ===========================================================================
@@ -436,7 +464,9 @@ class TestStubProtocolParity:
 
     def test_all_responses_have_completion_marker(self, raw):
         for cmd, resp in raw.items():
-            assert "Command completed successfully" in resp, f"'{cmd}' response missing completion marker"
+            assert "Command completed successfully" in resp, (
+                f"'{cmd}' response missing completion marker"
+            )
 
     def test_pwr_has_header_columns(self, raw):
         for col in (

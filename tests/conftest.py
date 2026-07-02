@@ -36,10 +36,12 @@ def _load_module(name: str, path: Path):
     if name in sys.modules:
         return sys.modules[name]
     spec = importlib.util.spec_from_file_location(name, path)
-    assert spec is not None and spec.loader is not None, f"Could not load module spec for {path}"
+    if spec is None:
+        raise ImportError(f"Cannot find module spec for {path}")
     mod = importlib.util.module_from_spec(spec)
     mod.__package__ = "pylontech_serial"
     sys.modules[name] = mod
+    assert spec.loader is not None
     spec.loader.exec_module(mod)
     return mod
 
@@ -113,7 +115,7 @@ def _raw_command(sock: socket.socket, cmd: str, read_pause: float = 0.4) -> str:
             if not chunk:
                 break
             data += chunk
-    except TimeoutError:
+    except socket.timeout:
         pass
     return data.decode("ascii", errors="replace")
 
@@ -126,7 +128,7 @@ def stub_conn(stub_server):
     time.sleep(0.15)
     try:
         s.recv(4096)  # discard initial "pylon>" prompt
-    except TimeoutError:
+    except socket.timeout:
         pass
     yield s
     s.close()
