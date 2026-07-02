@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from paho.mqtt.enums import CallbackAPIVersion
 
-from .const import DOMAIN
+from .const import DEFAULT_BATTERY_CAPACITY, DOMAIN
 from .structs import PylontechBattery, PylontechCell, PylontechSystem
 
 _LOGGER = logging.getLogger(__name__)
@@ -25,7 +25,7 @@ class PylontechCoordinator(DataUpdateCoordinator[PylontechSystem]):
         mqtt_user: str,
         mqtt_pass: str,
         topic_prefix: str,
-        default_capacity: float = 2.4,
+        default_capacity: float = DEFAULT_BATTERY_CAPACITY,
     ) -> None:
         # No update_interval — data arrives via push, not polling.
         super().__init__(hass, _LOGGER, name=DOMAIN)
@@ -99,12 +99,23 @@ class PylontechCoordinator(DataUpdateCoordinator[PylontechSystem]):
 
         try:
             payload = json.loads(msg.payload.decode())
+        except Exception as err:
+            _LOGGER.error("Error decoding MQTT message: %s", err, exc_info=True)
+            return
+
+        # Hand off to the HA event loop — all state mutations (deserialization,
+        # energy computation, capacity lookups) happen on a single thread so
+        # battery_capacities never needs a lock.
+        self.hass.loop.call_soon_threadsafe(self._process_payload, payload)
+
+    def _process_payload(self, payload: dict) -> None:
+        """Deserialize and update coordinator data. Always called on the HA event loop."""
+        try:
             system = self._deserialize(payload)
             self._compute_energy_stored(system)
-            # Schedule data update on the HA event loop (thread-safe).
-            self.hass.loop.call_soon_threadsafe(self.async_set_updated_data, system)
+            self.async_set_updated_data(system)
         except Exception as err:
-            _LOGGER.error("Error processing MQTT message: %s", err, exc_info=True)
+            _LOGGER.error("Error processing MQTT payload: %s", err, exc_info=True)
 
     # ------------------------------------------------------------------
     # DataUpdateCoordinator override

@@ -108,8 +108,8 @@ class PylontechParser:
                 break
 
         # Helpers for parsing extended columns — defined once, used per row.
-        def _mV(p: list, idx: int) -> float | None:
-            """Return millivolt column as volts, or None if column absent or placeholder '-'."""
+        def _milli(p: list, idx: int) -> float | None:
+            """Return a milli-unit column as its base unit, or None if absent or '-'."""
             if len(p) <= idx or p[idx] == "-":
                 return None
             return int(p[idx]) / 1000.0
@@ -140,10 +140,10 @@ class PylontechParser:
                     soc = int(parts[soc_idx].replace("%", ""))
 
                     # Extended fields — gracefully absent on older firmware
-                    temp_low = _mV(parts, temp_low_idx)
-                    temp_high = _mV(parts, temp_high_idx)
-                    volt_low = _mV(parts, volt_low_idx)
-                    volt_high = _mV(parts, volt_high_idx)
+                    temp_low = _milli(parts, temp_low_idx)
+                    temp_high = _milli(parts, temp_high_idx)
+                    volt_low = _milli(parts, volt_low_idx)
+                    volt_high = _milli(parts, volt_high_idx)
                     volt_st = _st(parts, volt_st_idx)
                     curr_st = _st(parts, curr_st_idx)
                     temp_st = _st(parts, temp_st_idx)
@@ -180,7 +180,7 @@ class PylontechParser:
                     valid_lines += 1
 
                 except (ValueError, IndexError) as error:
-                    _LOGGER.error(f"Error parsing pwr line '{line}': {error}")
+                    _LOGGER.error("Error parsing pwr line '%s': %s", line, error)
                     continue
 
         current_system.batteries = batteries
@@ -210,37 +210,37 @@ class PylontechParser:
 
             if "manufacturer" in key:
                 system.manufacturer = val
-            if "device name" in key:
+            elif "device name" in key:
                 system.model = val
-            if "main soft" in key:
+            elif "main soft" in key:
                 system.fw_version = val
-            if "board version" in key:
+            elif "board version" in key:
                 system.board_version = val
-            if key == "soft version":
+            elif key == "soft version":
                 system.soft_version = val
-            if key == "boot version":
+            elif key == "boot version":
                 system.boot_version = val
-            if "comm version" in key:
+            elif "comm version" in key:
                 system.comm_version = val
-            if "release date" in key:
+            elif "release date" in key:
                 system.release_date = val
-            if "barcode" in key:
+            elif "barcode" in key:
                 system.barcode = val
-            if "specification" in key:
+            elif "specification" in key:
                 system.spec = val
-            if "cell number" in key:
+            elif "cell number" in key:
                 try:
                     system.cell_count = int(val)
                 except (ValueError, AttributeError):
                     pass
-            if "max dischg curr" in key:
+            elif "max dischg curr" in key:
                 try:
                     system.max_dischg_curr = (
                         abs(int(re.sub(r"[^\d-]", "", val))) / 1000.0
                     )
                 except (ValueError, AttributeError):
                     pass
-            if "max charge curr" in key:
+            elif "max charge curr" in key:
                 try:
                     system.max_charge_curr = int(re.sub(r"\D", "", val)) / 1000.0
                 except (ValueError, AttributeError):

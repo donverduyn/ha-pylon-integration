@@ -64,14 +64,14 @@ SYSTEM_SENSORS: tuple[SensorEntityDescription, ...] = (
         translation_key="sys_energy_in",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.TOTAL,
     ),
     SensorEntityDescription(
         key="energy_out",
         translation_key="sys_energy_out",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
+        state_class=SensorStateClass.TOTAL,
     ),
     SensorEntityDescription(
         key="energy_stored",
@@ -85,7 +85,6 @@ SYSTEM_SENSORS: tuple[SensorEntityDescription, ...] = (
         key="soh",
         translation_key="sys_soh",
         native_unit_of_measurement=PERCENTAGE,
-        device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
@@ -389,60 +388,57 @@ BATTERY_SENSORS: tuple[SensorEntityDescription, ...] = (
 CELL_SENSORS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="voltage",
+        name="Voltage",
         native_unit_of_measurement=UnitOfElectricPotential.VOLT,
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="current",
+        name="Current",
         native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="temperature",
+        name="Temperature",
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="soc",
+        name="SOC",
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     SensorEntityDescription(
         key="base_state",
+        name="State",
     ),
     SensorEntityDescription(
         key="volt_status",
+        name="Voltage Status",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="curr_status",
+        name="Current Status",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="temp_status",
+        name="Temperature Status",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     SensorEntityDescription(
         key="capacity",
+        name="Capacity",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
-
-_CELL_SENSOR_LABELS: dict[str, str] = {
-    "voltage": "Voltage",
-    "current": "Current",
-    "temperature": "Temperature",
-    "soc": "SOC",
-    "base_state": "State",
-    "volt_status": "Voltage Status",
-    "curr_status": "Current Status",
-    "temp_status": "Temperature Status",
-    "capacity": "Capacity",
-}
 
 # ---------------------------------------------------------------------------
 # Platform setup
@@ -530,7 +526,7 @@ class PylontechSystemSensor(PylontechSystemEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator)
         self.entity_description = description
-        self._attr_unique_id = f"{entry_id}_{description.translation_key}"
+        self._attr_unique_id = f"{entry_id}_{description.key}"
 
     @property
     def native_value(self):
@@ -553,7 +549,7 @@ class PylontechBatterySensor(PylontechBatteryEntity, SensorEntity):
     ) -> None:
         super().__init__(coordinator, bat_id)
         self.entity_description = description
-        self._attr_unique_id = f"{entry_id}_bat{bat_id}_{description.translation_key}"
+        self._attr_unique_id = f"{entry_id}_bat{bat_id}_{description.key}"
 
     @property
     def native_value(self):
@@ -581,7 +577,7 @@ class PylontechCellSensor(PylontechCellEntity, SensorEntity):
         super().__init__(coordinator, bat_id, cell_id)
         self.entity_description = description
         self._attr_unique_id = f"{entry_id}_bat{bat_id}_cell{cell_id}_{description.key}"
-        self._attr_name = f"Cell {cell_id} {_CELL_SENSOR_LABELS[description.key]}"
+        self._attr_name = f"Cell {cell_id} {description.name}"
 
     @property
     def native_value(self):

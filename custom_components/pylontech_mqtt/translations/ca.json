@@ -5,6 +5,7 @@
     },
     "error": {
       "cannot_connect": "No s'ha pogut connectar al broker MQTT",
+      "invalid_auth": "Nom d'usuari o contrasenya incorrectes",
       "unknown": "Error inesperat"
     },
     "step": {

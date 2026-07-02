@@ -17,10 +17,6 @@ async def async_setup_entry(
 ) -> None:
     """Set up the number platform."""
     coordinator = hass.data[DOMAIN][entry.entry_id]
-    unique_id_prefix = entry.entry_id
-    entities = []
-
-    async_add_entities(entities)
 
     seen_bat_ids: set[int] = set()
 
@@ -31,7 +27,11 @@ async def async_setup_entry(
         for bat in coordinator.data.batteries:
             if bat.sys_id not in seen_bat_ids:
                 seen_bat_ids.add(bat.sys_id)
-                new_entities.append(PylontechBatteryCapacityNumber(coordinator, unique_id_prefix, bat.sys_id))
+                new_entities.append(
+                    PylontechBatteryCapacityNumber(
+                        coordinator, entry.entry_id, bat.sys_id
+                    )
+                )
         if new_entities:
             async_add_entities(new_entities)
 

@@ -310,6 +310,7 @@ def main() -> None:
             sys.exit(0)
         except Exception as err:
             _LOGGER.error("Unexpected error: %s", err, exc_info=True)
+            info_fetched = False
 
         time.sleep(POLL_INTERVAL)
 

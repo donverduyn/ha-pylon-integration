@@ -1,10 +1,13 @@
 """Config flow for the Pylontech MQTT integration."""
 
-import socket
+import asyncio
+import time
 
+import paho.mqtt.client as mqtt
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from paho.mqtt.enums import CallbackAPIVersion
 
 from .const import (
     CONF_MQTT_HOST,
@@ -18,13 +21,45 @@ from .const import (
 )
 
 
-def _test_broker_reachable(host: str, port: int) -> bool:
-    """Return True when the MQTT broker TCP port is reachable."""
+def _test_mqtt_connection(
+    host: str, port: int, user: str = "", password: str = ""
+) -> str | None:
+    """Attempt a real MQTT connection; return None on success or an error key on failure.
+
+    Returns ``"invalid_auth"`` when the broker rejects the credentials, or
+    ``"cannot_connect"`` for all other failures (unreachable host, timeout, …).
+    """
+    outcome: list[str | None] = [None]
+
+    def on_connect(c, userdata, flags, reason_code, properties):
+        if reason_code.is_failure:
+            rc = getattr(reason_code, "value", None)
+            outcome[0] = "invalid_auth" if rc in (4, 5) else "cannot_connect"
+        else:
+            outcome[0] = "ok"
+        c.disconnect()
+
+    client = mqtt.Client(CallbackAPIVersion.VERSION2)
+    if user:
+        client.username_pw_set(user, password)
+    client.on_connect = on_connect
+
     try:
-        with socket.create_connection((host, port), timeout=5):
-            return True
+        client.connect(host, port, keepalive=10)
     except OSError:
-        return False
+        return "cannot_connect"
+
+    deadline = time.monotonic() + 5.0
+    while outcome[0] is None and time.monotonic() < deadline:
+        client.loop(timeout=0.2)
+
+    try:
+        client.disconnect()
+        client.loop(timeout=0.2)
+    except Exception:
+        pass
+
+    return None if outcome[0] == "ok" else (outcome[0] or "cannot_connect")
 
 
 def _broker_schema(
@@ -58,11 +93,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             host = user_input[CONF_MQTT_HOST]
             port = user_input[CONF_MQTT_PORT]
 
-            reachable = await self.hass.async_add_executor_job(
-                _test_broker_reachable, host, port
-            )
-            if not reachable:
-                errors["base"] = "cannot_connect"
+            try:
+                conn_error = await asyncio.wait_for(
+                    self.hass.async_add_executor_job(
+                        _test_mqtt_connection,
+                        host,
+                        port,
+                        user_input.get(CONF_MQTT_USER, ""),
+                        user_input.get(CONF_MQTT_PASS, ""),
+                    ),
+                    timeout=10.0,
+                )
+            except asyncio.TimeoutError:
+                conn_error = "cannot_connect"
+            if conn_error:
+                errors["base"] = conn_error
             else:
                 await self.async_set_unique_id(
                     f"{host}:{port}:{user_input[CONF_MQTT_TOPIC]}"
@@ -95,11 +140,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             host = user_input[CONF_MQTT_HOST]
             port = user_input[CONF_MQTT_PORT]
 
-            reachable = await self.hass.async_add_executor_job(
-                _test_broker_reachable, host, port
-            )
-            if not reachable:
-                errors["base"] = "cannot_connect"
+            try:
+                conn_error = await asyncio.wait_for(
+                    self.hass.async_add_executor_job(
+                        _test_mqtt_connection,
+                        host,
+                        port,
+                        user_input.get(CONF_MQTT_USER, ""),
+                        user_input.get(CONF_MQTT_PASS, ""),
+                    ),
+                    timeout=10.0,
+                )
+            except asyncio.TimeoutError:
+                conn_error = "cannot_connect"
+            if conn_error:
+                errors["base"] = conn_error
             else:
                 return self.async_create_entry(title="", data=user_input)
 

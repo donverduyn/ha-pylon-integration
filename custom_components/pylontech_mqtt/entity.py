@@ -10,9 +10,6 @@ class PylontechSystemEntity(CoordinatorEntity[PylontechCoordinator]):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator):
-        super().__init__(coordinator)
-
     @property
     def device_info(self) -> DeviceInfo:
         data = self.coordinator.data
@@ -48,24 +45,9 @@ class PylontechBatteryEntity(CoordinatorEntity[PylontechCoordinator]):
         )
 
 
-class PylontechCellEntity(CoordinatorEntity[PylontechCoordinator]):
+class PylontechCellEntity(PylontechBatteryEntity):
     """Base class for per-cell entities, attached to the parent battery module device."""
 
-    _attr_has_entity_name = True
-
     def __init__(self, coordinator, bat_id: int, cell_id: int):
-        super().__init__(coordinator)
-        self._bat_id = bat_id
+        super().__init__(coordinator, bat_id)
         self._cell_id = cell_id
-
-    @property
-    def device_info(self) -> DeviceInfo:
-        data = self.coordinator.data
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"battery_{self._bat_id}")},
-            name=f"Pylontech Module {self._bat_id}",
-            manufacturer=(data.manufacturer or "Pylontech") if data else "Pylontech",
-            model=data.model if data else None,
-            sw_version=data.fw_version if data else None,
-            via_device=(DOMAIN, "system"),
-        )
