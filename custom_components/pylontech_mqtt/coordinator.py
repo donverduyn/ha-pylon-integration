@@ -9,6 +9,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from paho.mqtt.enums import CallbackAPIVersion
 
 from .const import DEFAULT_BATTERY_CAPACITY, DOMAIN
+from .parser import PylontechParser
 from .structs import PylontechBattery, PylontechCell, PylontechSystem
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,12 +41,13 @@ class PylontechCoordinator(DataUpdateCoordinator[PylontechSystem]):
 
         self.default_capacity = default_capacity
         self.battery_capacities: dict[int, float] = {}
+        self._auto_capacity_set: bool = False
 
         # Start unavailable until the first MQTT message arrives.
         self.last_update_success = False
 
     # ------------------------------------------------------------------
-    # Setup / teardown  (called from executor thread via async_add_executor_job)
+    # Setup / teardown
     # ------------------------------------------------------------------
 
     def setup(self) -> None:
@@ -112,6 +114,20 @@ class PylontechCoordinator(DataUpdateCoordinator[PylontechSystem]):
         """Deserialize and update coordinator data. Always called on the HA event loop."""
         try:
             system = self._deserialize(payload)
+            # On the first payload that includes a parseable spec string (e.g.
+            # "48V/100AH"), auto-derive the per-module kWh capacity so battery
+            # number entities are pre-filled on first discovery instead of
+            # defaulting to the US2000 fallback.
+            if not self._auto_capacity_set and system.spec:
+                derived = PylontechParser.parse_spec_capacity(system.spec)
+                if derived is not None:
+                    self.default_capacity = derived
+                    self._auto_capacity_set = True
+                    _LOGGER.debug(
+                        "Battery capacity auto-set to %.2f kWh from spec '%s'",
+                        derived,
+                        system.spec,
+                    )
             self._compute_energy_stored(system)
             self.async_set_updated_data(system)
         except Exception as err:

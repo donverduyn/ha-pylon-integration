@@ -824,6 +824,39 @@ class TestStructs:
         assert bat.cells == []
 
 
+class TestParseSpecCapacity:
+    """Unit tests for PylontechParser.parse_spec_capacity."""
+
+    def test_us2000(self):
+        assert PylontechParser.parse_spec_capacity("48V/50AH") == pytest.approx(2.40)
+
+    def test_us3000(self):
+        assert PylontechParser.parse_spec_capacity("48V/74AH") == pytest.approx(3.55)
+
+    def test_us5000(self):
+        assert PylontechParser.parse_spec_capacity("48V/100AH") == pytest.approx(4.80)
+
+    def test_lowercase_units(self):
+        assert PylontechParser.parse_spec_capacity("48v/100ah") == pytest.approx(4.80)
+
+    def test_spaces_around_slash(self):
+        assert PylontechParser.parse_spec_capacity("48V / 100AH") == pytest.approx(4.80)
+
+    def test_decimal_voltage(self):
+        """Non-integer voltage (e.g. some LiFePO4 stacks use 51.2 V nominal)."""
+        assert PylontechParser.parse_spec_capacity("51.2V/100AH") == pytest.approx(5.12)
+
+    def test_unparseable_returns_none(self):
+        assert PylontechParser.parse_spec_capacity("UNKNOWN") is None
+
+    def test_empty_returns_none(self):
+        assert PylontechParser.parse_spec_capacity("") is None
+
+    def test_partial_spec_returns_none(self):
+        """Only voltage present, no Ah component."""
+        assert PylontechParser.parse_spec_capacity("48V") is None
+
+
 # ===========================================================================
 # parse_bat — per-cell data
 # ===========================================================================
