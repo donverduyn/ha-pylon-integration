@@ -419,13 +419,19 @@ def _resp_pwr(cmd: str) -> bytes:
                 dtl = s["temp_low"]
                 dth = s["temp_high"]
                 if fault == "ov":
-                    dv = 3870 * cells; dvl = 3865; dvh = 3870
+                    dv = 3870 * cells
+                    dvl = 3865
+                    dvh = 3870
                 elif fault == "uv":
-                    dv = 2750 * cells; dvl = 2750; dvh = 2760
+                    dv = 2750 * cells
+                    dvl = 2750
+                    dvh = 2760
                 elif fault == "ot":
-                    dt = 55000; dth = 55000
+                    dt = 55000
+                    dth = 55000
                 elif fault == "ut":
-                    dt = -10000; dtl = -10000
+                    dt = -10000
+                    dtl = -10000
                 elif fault == "oc":
                     dc = -150000 if s["current"] < 0 else 150000
 
@@ -870,7 +876,8 @@ def _resp_pwrsys(cmd: str) -> bytes:
             gv = s["voltage"] + grng.randint(-200, 200)
             gc = group_currents[g - 1]
             g_absent = sum(
-                1 for slot in range(1, batt_per_group + 1)
+                1
+                for slot in range(1, batt_per_group + 1)
                 if _faults.get((g - 1) * slots_per_group + slot) == "absent"
             )
             g_online = batt_per_group - g_absent
@@ -950,7 +957,11 @@ def _resp_stub(cmd: str) -> bytes:
             _state["current"] = ma
             _state["charging"] = ma > 0
             _state["current_override"] = ma
-        return _wrap(cmd, f"Current fixed at {ma} mA (use 'stub current auto' to resume)", kv=True)
+        return _wrap(
+            cmd,
+            f"Current fixed at {ma} mA (use 'stub current auto' to resume)",
+            kv=True,
+        )
     return _wrap(
         cmd,
         "Usage: stub fault <bat> <ov|uv|ot|ut|oc|absent> | stub clear <bat> | stub soc <pct> | stub current <mA|auto>",
