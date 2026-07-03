@@ -7,6 +7,7 @@
     "ghcr.io/devcontainers-extra/features/ripgrep:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers-extra/features/claude-code:2": {},
+    "ghcr.io/devcontainers-extra/features/opencode:1": {},
     "ghcr.io/devcontainers-extra/features/uv:1": {}
   },
   // Install dev dependencies into the base image's system Python on container creation.
