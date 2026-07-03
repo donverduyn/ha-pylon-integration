@@ -1,7 +1,6 @@
 """Unit tests for EnergyTracker (docker/main.py)."""
 
 import json
-import os
 from datetime import datetime
 from unittest.mock import patch
 
@@ -160,8 +159,8 @@ class TestEnergyTrackerPersistence:
         with patch("main.datetime") as mock_dt:
             mock_dt.now.side_effect = [t0, t1]
             tracker = EnergyTracker(state_file=state_file)
-            tracker.update(1000.0)   # first call: no accumulation
-            tracker.update(1000.0)   # 1 h at 1000 W → 1.0 kWh in
+            tracker.update(1000.0)  # first call: no accumulation
+            tracker.update(1000.0)  # 1 h at 1000 W → 1.0 kWh in
 
         # Simulate restart: new instance reads the same file
         tracker2 = EnergyTracker(state_file=state_file)

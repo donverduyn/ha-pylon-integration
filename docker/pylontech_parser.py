@@ -344,10 +344,7 @@ class PylontechParser:
                 data_i = 0  # corresponding data-row column index
                 while hdr_i < len(parts):
                     tok = parts[hdr_i]
-                    if (
-                        hdr_i + 1 < len(parts)
-                        and parts[hdr_i + 1].lower() == "state"
-                    ):
+                    if hdr_i + 1 < len(parts) and parts[hdr_i + 1].lower() == "state":
                         # Compound "X State" header → single data token
                         if tok == "Base":
                             base_idx = data_i
@@ -374,9 +371,15 @@ class PylontechParser:
                 _LOGGER.debug(
                     "bat header detected — volt=%d curr=%d temp=%d "
                     "base=%d volt_st=%d curr_st=%d temp_st=%d soc=%d cap=%d",
-                    volt_idx, curr_idx, temp_idx,
-                    base_idx, volt_st_idx, curr_st_idx, temp_st_idx,
-                    soc_idx, cap_idx,
+                    volt_idx,
+                    curr_idx,
+                    temp_idx,
+                    base_idx,
+                    volt_st_idx,
+                    curr_st_idx,
+                    temp_st_idx,
+                    soc_idx,
+                    cap_idx,
                 )
                 continue
 
@@ -394,7 +397,9 @@ class PylontechParser:
                 volt_status = parts[volt_st_idx] if len(parts) > volt_st_idx else None
                 curr_status = parts[curr_st_idx] if len(parts) > curr_st_idx else None
                 temp_status = parts[temp_st_idx] if len(parts) > temp_st_idx else None
-                soc = int(parts[soc_idx].replace("%", "")) if len(parts) > soc_idx else 0
+                soc = (
+                    int(parts[soc_idx].replace("%", "")) if len(parts) > soc_idx else 0
+                )
                 capacity = int(parts[cap_idx]) if len(parts) > cap_idx else None
                 cells.append(
                     PylontechCell(

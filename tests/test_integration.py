@@ -222,9 +222,7 @@ class TestUnloadEntry:
 
         assert entry.entry_id not in hass.data.get(DOMAIN, {})
 
-    async def test_unload_calls_coordinator_shutdown(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_unload_calls_coordinator_shutdown(self, hass: HomeAssistant) -> None:
         """Unloading must invoke coordinator.shutdown() to stop the MQTT thread."""
         from unittest.mock import patch as _patch
 
@@ -236,9 +234,7 @@ class TestUnloadEntry:
 
         mock_shutdown.assert_called_once()
 
-    async def test_reload_re_registers_sensors(
-        self, hass: HomeAssistant
-    ) -> None:
+    async def test_reload_re_registers_sensors(self, hass: HomeAssistant) -> None:
         """After reload, the system voltage sensor must still be registered."""
         entry, coordinator = await _create_entry(hass)
         coordinator._process_payload(_PAYLOAD)

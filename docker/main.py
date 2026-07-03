@@ -197,15 +197,21 @@ class EnergyTracker:
         except FileNotFoundError:
             pass  # First run — no state file yet
         except (json.JSONDecodeError, KeyError, ValueError, OSError) as err:
-            _LOGGER.warning("Could not load energy state from %s: %s", self._state_file, err)
+            _LOGGER.warning(
+                "Could not load energy state from %s: %s", self._state_file, err
+            )
 
     def _save(self) -> None:
         """Persist current counters to the state file."""
         try:
             with open(self._state_file, "w") as f:
-                json.dump({"energy_in": self.energy_in, "energy_out": self.energy_out}, f)
+                json.dump(
+                    {"energy_in": self.energy_in, "energy_out": self.energy_out}, f
+                )
         except OSError as err:
-            _LOGGER.warning("Could not save energy state to %s: %s", self._state_file, err)
+            _LOGGER.warning(
+                "Could not save energy state to %s: %s", self._state_file, err
+            )
 
     def update(self, power_w: float) -> None:
         now = datetime.now()
