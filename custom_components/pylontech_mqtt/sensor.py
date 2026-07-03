@@ -447,7 +447,7 @@ async def async_setup_entry(
 
     # System-level sensors are always known upfront.
     async_add_entities(
-        PylontechSystemSensor(coordinator, coordinator.topic_prefix, desc)
+        PylontechSystemSensor(coordinator, coordinator.stack_id, desc)
         for desc in SYSTEM_SENSORS
     )
 
@@ -468,7 +468,7 @@ async def async_setup_entry(
                 seen_bat_ids.add(bat_id)
                 new_entities.extend(
                     PylontechBatterySensor(
-                        coordinator, coordinator.topic_prefix, bat_id, desc
+                        coordinator, coordinator.stack_id, bat_id, desc
                     )
                     for desc in BATTERY_SENSORS
                 )
@@ -482,7 +482,7 @@ async def async_setup_entry(
                     new_entities.extend(
                         PylontechCellSensor(
                             coordinator,
-                            coordinator.topic_prefix,
+                            coordinator.stack_id,
                             bat_id,
                             cell_id,
                             desc,
@@ -509,10 +509,10 @@ class PylontechSystemSensor(PylontechSystemEntity, SensorEntity):
     def __init__(
         self,
         coordinator,
-        topic_prefix: str,
+        stack_id: str,
         description: SensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator, topic_prefix)
+        super().__init__(coordinator, stack_id)
         self.entity_description = description
         self._attr_unique_id = f"{self._stack_id}_{description.key}"
 
@@ -531,11 +531,11 @@ class PylontechBatterySensor(PylontechBatteryEntity, SensorEntity):
     def __init__(
         self,
         coordinator,
-        topic_prefix: str,
+        stack_id: str,
         bat_id: int,
         description: SensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator, topic_prefix, bat_id)
+        super().__init__(coordinator, stack_id, bat_id)
         self.entity_description = description
         self._attr_unique_id = f"{self._stack_id}_bat{bat_id}_{description.key}"
 
@@ -557,12 +557,12 @@ class PylontechCellSensor(PylontechCellEntity, SensorEntity):
     def __init__(
         self,
         coordinator,
-        topic_prefix: str,
+        stack_id: str,
         bat_id: int,
         cell_id: int,
         description: SensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator, topic_prefix, bat_id, cell_id)
+        super().__init__(coordinator, stack_id, bat_id, cell_id)
         self.entity_description = description
         self._attr_unique_id = (
             f"{self._stack_id}_bat{bat_id}_cell{cell_id}_{description.key}"

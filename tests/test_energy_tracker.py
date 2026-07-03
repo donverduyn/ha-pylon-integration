@@ -87,24 +87,40 @@ class TestEnergyTrackerTrapezoidalIntegration:
         assert tracker.energy_in == pytest.approx(1.5)
         assert tracker.energy_out == 0.0
 
-    def test_sign_crossing_between_samples_nets_near_zero(self):
-        """A charge→discharge crossing spanning exactly one interval nets to
-        ~0 rather than splitting evenly between energy_in and energy_out.
+    def test_sign_crossing_splits_at_interpolated_zero_crossing(self):
+        """A charge→discharge crossing spanning exactly one interval must
+        split at the interpolated zero-crossing, not net to ~0.
 
-        With only two endpoint samples (+500 W then −500 W), trapezoidal
-        integration has no visibility into *when* the sign actually flipped
-        within the interval, so it reports the net average (0 W) instead of
-        guessing a 50/50 split — the correct behavior for sparse periodic
-        sampling, even though it means a genuine crossing mid-interval isn't
-        separately attributed to both directions.
+        With only two endpoint samples (+500 W then −500 W), integration
+        assumes power varied linearly between them — which crosses zero at
+        the interval's midpoint here — so half the hour (500 W → 0 W)
+        integrates to 0.125 kWh in and the other half (0 W → −500 W) to
+        0.125 kWh out. Averaging the endpoints into a single 0 W figure
+        would silently drop that real throughput from both counters.
         """
         tracker = EnergyTracker()
         with patch("main.time.monotonic", side_effect=[0.0, 3600.0, 7200.0]):
             tracker.update(500.0)  # first call: no accumulation
             tracker.update(500.0)  # 1 h at a constant 500 W → 0.5 kWh in
-            tracker.update(-500.0)  # avg(500, -500) == 0 → no net energy either way
-        assert tracker.energy_in == pytest.approx(0.5)
-        assert tracker.energy_out == 0.0
+            tracker.update(-500.0)  # +500 W -> -500 W crosses zero at 30 min
+        assert tracker.energy_in == pytest.approx(0.5 + 0.125)
+        assert tracker.energy_out == pytest.approx(0.125)
+
+    def test_crossing_closer_to_one_endpoint_splits_unevenly(self):
+        """The zero-crossing point must track where a linear interpolation
+        actually reaches 0, not always assume the interval's midpoint.
+
+        +1000 W -> -500 W over 1 h crosses zero at 2/3 of the interval
+        (t* = 1000 / (1000 - (-500)) = 2/3 h). First segment: 1000 W -> 0 W
+        over 2/3 h averages 500 W = 1/3 kWh in. Second segment: 0 W ->
+        -500 W over 1/3 h averages -250 W = 1/12 kWh out.
+        """
+        tracker = EnergyTracker()
+        with patch("main.time.monotonic", side_effect=[0.0, 3600.0]):
+            tracker.update(1000.0)
+            tracker.update(-500.0)
+        assert tracker.energy_in == pytest.approx(1.0 / 3.0)
+        assert tracker.energy_out == pytest.approx(1.0 / 12.0)
 
 
 class TestEnergyTrackerSanityLimits:

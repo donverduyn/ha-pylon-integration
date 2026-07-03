@@ -33,7 +33,7 @@ async def async_setup_entry(
                 seen_bat_ids.add(bat_id)
                 new_entities.append(
                     PylontechBatteryCapacityNumber(
-                        coordinator, coordinator.topic_prefix, bat_id
+                        coordinator, coordinator.stack_id, bat_id
                     )
                 )
         if new_entities:
@@ -49,10 +49,10 @@ class PylontechBatteryCapacityNumber(PylontechBatteryEntity, RestoreNumber):
     def __init__(
         self,
         coordinator: PylontechCoordinator,
-        topic_prefix: str,
+        stack_id: str,
         bat_id: int,
     ) -> None:
-        super().__init__(coordinator, topic_prefix, bat_id)
+        super().__init__(coordinator, stack_id, bat_id)
 
         self._attr_unique_id = f"{self._stack_id}_bat{bat_id}_capacity"
         self._attr_translation_key = "battery_capacity"

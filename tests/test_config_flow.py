@@ -97,6 +97,43 @@ async def test_invalid_auth_shows_error(hass: HomeAssistant) -> None:
     assert result["errors"]["base"] == "invalid_auth"
 
 
+@pytest.mark.parametrize(
+    "topic",
+    [
+        "pylontech/#",
+        "pylontech/+/stack",
+        "",
+        "  pylontech/stack",
+        "pylontech/stack  ",
+        "/pylontech/stack",
+        "pylontech/stack/",
+    ],
+)
+async def test_invalid_topic_prefix_shows_field_error(
+    hass: HomeAssistant, topic: str
+) -> None:
+    """A topic containing MQTT wildcards or malformed slashes/whitespace
+    must be rejected here — subscribing or publishing to it later raises
+    ValueError deep inside paho-mqtt at runtime (see
+    config_flow._invalid_topic_prefix)."""
+    with patch(_PATCH_CONN) as mock_conn:
+        init = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result = cast(
+            dict[str, Any],
+            await hass.config_entries.flow.async_configure(
+                init["flow_id"], {**_VALID_INPUT, "mqtt_topic": topic}
+            ),
+        )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["mqtt_topic"] == "invalid_topic"
+    # The connection test must be skipped entirely for a topic that's
+    # already known to be invalid — no point probing a broker just to
+    # discard the result.
+    mock_conn.assert_not_called()
+
+
 async def test_successful_entry_created(hass: HomeAssistant) -> None:
     """Valid credentials and reachable broker must create a config entry."""
     with patch(_PATCH_CONN, return_value=None), patch(_PATCH_SETUP):
@@ -205,6 +242,32 @@ async def test_reconfigure_cannot_connect(hass: HomeAssistant) -> None:
             ),
         )
     assert result["errors"]["base"] == "cannot_connect"
+
+
+async def test_reconfigure_invalid_topic_prefix_shows_field_error(
+    hass: HomeAssistant,
+) -> None:
+    """An invalid topic during reconfigure must be rejected the same way
+    as during initial setup, before any connection is attempted."""
+    with patch(_PATCH_CONN, return_value=None), patch(_PATCH_SETUP):
+        init = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        await hass.config_entries.flow.async_configure(init["flow_id"], _VALID_INPUT)
+
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    reconf = await _start_reconfigure(hass, entry.entry_id)
+
+    with patch(_PATCH_CONN) as mock_conn:
+        result = cast(
+            dict[str, Any],
+            await hass.config_entries.flow.async_configure(
+                reconf["flow_id"],
+                {**_VALID_INPUT, "mqtt_topic": "pylontech/#"},
+            ),
+        )
+    assert result["errors"]["mqtt_topic"] == "invalid_topic"
+    mock_conn.assert_not_called()
 
 
 async def test_reconfigure_updates_entry_data_in_place(hass: HomeAssistant) -> None:

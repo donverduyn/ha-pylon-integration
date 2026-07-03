@@ -148,30 +148,41 @@ class BmsConnection:
                 self._serial.open()
 
     def _read_until_prompt(self) -> bytes:
-        """Read chunks until the "pylon>" prompt appears, or _READ_TIMEOUT elapses."""
+        """Read chunks until the "pylon>" prompt appears.
+
+        Raises ConnectionError if the remote/serial side goes away, or
+        TimeoutError if _READ_TIMEOUT elapses, before the prompt is seen.
+        A response is either complete or an exception — it must never come
+        back as a partial fragment silently mistaken for a full one further
+        up the call chain (see send_command's callers, which check for
+        expected substrings rather than a definitive terminator).
+        """
         deadline = time.monotonic() + _READ_TIMEOUT
         data = b""
         while time.monotonic() < deadline:
             if CONNECTION_TYPE == "tcp":
                 if self._tcp is None:
-                    break
+                    raise ConnectionError("TCP socket is not open")
                 self._tcp.settimeout(_POLL_INTERVAL)
                 try:
                     chunk = self._tcp.recv(4096)
                 except socket.timeout:
                     continue
                 if not chunk:
-                    break  # remote closed the connection
+                    raise ConnectionError("BMS closed the TCP connection")
             else:
                 if self._serial is None:
-                    break
+                    raise ConnectionError("Serial port is not open")
                 chunk = self._serial.read(4096)
                 if not chunk:
                     continue
             data += chunk
             if PROMPT in data:
-                break
-        return data
+                return data
+        raise TimeoutError(
+            f"Timed out after {_READ_TIMEOUT}s waiting for the "
+            f"{PROMPT.decode()!r} prompt ({len(data)} bytes received)"
+        )
 
     def send_command(self, cmd: str) -> str:
         """Send a command and return the ASCII response."""
@@ -272,17 +283,7 @@ class EnergyTracker:
         if self._last_time is not None and self._last_power is not None:
             elapsed_seconds = now - self._last_time
             if 0 < elapsed_seconds <= self._MAX_INTERVAL_SECONDS:
-                # Trapezoidal integration: average this sample with the
-                # previous one rather than assuming the whole interval was at
-                # the latest reading (rectangular/step integration mis-counts
-                # whenever power changes materially between polls).
-                avg_power = (self._last_power + power_w) / 2.0
-                hours = elapsed_seconds / 3600.0
-                kwh = abs(avg_power * hours) / 1000.0
-                if avg_power >= 0:
-                    self.energy_in += kwh
-                else:
-                    self.energy_out += kwh
+                self._integrate(self._last_power, power_w, elapsed_seconds)
                 if self._state_file:
                     self._save()
             elif elapsed_seconds > self._MAX_INTERVAL_SECONDS:
@@ -293,6 +294,44 @@ class EnergyTracker:
                 )
         self._last_time = now
         self._last_power = power_w
+
+    def _integrate(
+        self, start_power: float, end_power: float, elapsed_seconds: float
+    ) -> None:
+        """Trapezoidal-integrate one interval into energy_in/energy_out.
+
+        Assumes power varies linearly between the two endpoint samples,
+        which is the best estimate available from sparse periodic polling.
+        When the samples straddle zero (e.g. +500 W -> -500 W), that
+        assumption implies a charge/discharge reversal partway through the
+        interval — splitting at the interpolated zero-crossing captures the
+        energy on both sides of it, instead of averaging the endpoints into
+        a single net figure that would otherwise attribute zero energy to
+        either direction despite real throughput on each side of the flip.
+        """
+        if start_power * end_power < 0:
+            crossing_seconds = (
+                elapsed_seconds * start_power / (start_power - end_power)
+            )
+            self._integrate_segment(start_power, 0.0, crossing_seconds)
+            self._integrate_segment(0.0, end_power, elapsed_seconds - crossing_seconds)
+        else:
+            self._integrate_segment(start_power, end_power, elapsed_seconds)
+
+    def _integrate_segment(
+        self, start_power: float, end_power: float, seconds: float
+    ) -> None:
+        # Trapezoidal integration: average the two endpoints of this segment
+        # rather than assuming it was all at one reading (rectangular/step
+        # integration mis-counts whenever power changes materially between
+        # polls).
+        avg_power = (start_power + end_power) / 2.0
+        hours = seconds / 3600.0
+        kwh = abs(avg_power * hours) / 1000.0
+        if avg_power >= 0:
+            self.energy_in += kwh
+        else:
+            self.energy_out += kwh
 
     def invalidate_last_time(self) -> None:
         """Clear the last-poll timestamp and power sample.
@@ -310,9 +349,31 @@ class EnergyTracker:
 # ---------------------------------------------------------------------------
 
 
+def _clean_shutdown(client: mqtt.Client, bms: "BmsConnection") -> None:
+    """Publish offline, disconnect MQTT, and close the BMS link, then exit(0).
+
+    Shared by every point in the poll loop that can observe a
+    KeyboardInterrupt (raised by the SIGTERM handler below), so a clean
+    shutdown happens regardless of which statement the signal lands on —
+    not just the ones inside the main try block.
+    """
+    _LOGGER.info("Shutting down...")
+    msg = client.publish(AVAIL_TOPIC, "offline", retain=True)
+    msg.wait_for_publish(timeout=5)
+    client.loop_stop()
+    client.disconnect()
+    bms.close()
+    sys.exit(0)
+
+
 def main() -> None:
     if not MQTT_BROKER:
         _LOGGER.error("MQTT_BROKER environment variable is required")
+        sys.exit(1)
+    if CONNECTION_TYPE not in ("tcp", "serial"):
+        _LOGGER.error(
+            "CONNECTION_TYPE must be 'tcp' or 'serial' (got %r)", CONNECTION_TYPE
+        )
         sys.exit(1)
     if CONNECTION_TYPE == "tcp" and not TCP_HOST:
         _LOGGER.error("TCP_HOST is required when CONNECTION_TYPE=tcp")
@@ -460,13 +521,7 @@ def main() -> None:
             time.sleep(5)
             continue
         except KeyboardInterrupt:
-            _LOGGER.info("Shutting down...")
-            msg = client.publish(AVAIL_TOPIC, "offline", retain=True)
-            msg.wait_for_publish(timeout=5)
-            client.loop_stop()
-            client.disconnect()
-            bms.close()
-            sys.exit(0)
+            _clean_shutdown(client, bms)  # never returns — exits the process
         except Exception as err:
             _LOGGER.error("Unexpected error: %s", err, exc_info=True)
             client.publish(AVAIL_TOPIC, "offline", retain=True)
@@ -476,7 +531,15 @@ def main() -> None:
             energy.invalidate_last_time()
             info_fetched = False
 
-        time.sleep(POLL_INTERVAL)
+        # Outside the try above so a SIGTERM/KeyboardInterrupt landing here
+        # (the loop's most likely resting point, given POLL_INTERVAL is
+        # normally far longer than one poll) still hits the clean-shutdown
+        # path instead of exiting without publishing "offline" or closing
+        # the BMS connection.
+        try:
+            time.sleep(POLL_INTERVAL)
+        except KeyboardInterrupt:
+            _clean_shutdown(client, bms)
 
 
 if __name__ == "__main__":

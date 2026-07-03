@@ -1,3 +1,5 @@
+import hashlib
+
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -6,18 +8,31 @@ from .coordinator import PylontechCoordinator
 
 
 def stack_id_from_topic(topic_prefix: str) -> str:
-    """Derive a registry-safe identity token from the sidecar's MQTT topic prefix.
+    """Derive a registry-safe identity token from a topic prefix alone.
 
-    The topic prefix (not the config-entry ID) is used as the basis for every
-    unique_id and device identifier in this integration. The entry ID is a
-    fresh random UUID every time an entry is created, so basing identity on
-    it means deleting and re-adding the integration — the documented upgrade
-    path for breaking schema changes — orphans every entity, device,
-    customization, and dashboard reference. The topic prefix is the one
-    piece of configuration a user re-enters identically across such a
-    reinstall, so identity survives it.
+    Superseded by stack_id_from_broker(), which also folds in host/port so
+    two brokers sharing the default topic don't collide. Kept only so
+    __init__._migrate_registry_identity() can still recognize and rewrite
+    identities created by that older, topic-only scheme.
     """
     return topic_prefix.replace("/", "_")
+
+
+def stack_id_from_broker(host: str, port: int, topic_prefix: str) -> str:
+    """Derive a registry-safe, collision-resistant identity token for a stack.
+
+    Hashing host+port+topic (rather than string-munging the topic alone)
+    fixes two collision cases a plain "/" -> "_" replace can't avoid: two
+    brokers that both use the default topic, and distinct topics like
+    "plant/stack" and "plant_stack" that would otherwise map to the same
+    token. The entry ID is deliberately excluded — it's a fresh random UUID
+    every time a config entry is created, so basing identity on it means
+    deleting and re-adding the integration orphans every entity, device,
+    customization, and dashboard reference. Host+port+topic is what a user
+    re-enters identically across such a reinstall, so identity survives it.
+    """
+    digest = hashlib.sha256(f"{host}\x00{port}\x00{topic_prefix}".encode()).hexdigest()
+    return digest[:16]
 
 
 class PylontechSystemEntity(CoordinatorEntity[PylontechCoordinator]):
@@ -25,9 +40,9 @@ class PylontechSystemEntity(CoordinatorEntity[PylontechCoordinator]):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, topic_prefix: str):
+    def __init__(self, coordinator, stack_id: str):
         super().__init__(coordinator)
-        self._stack_id = stack_id_from_topic(topic_prefix)
+        self._stack_id = stack_id
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -49,9 +64,9 @@ class PylontechBatteryEntity(CoordinatorEntity[PylontechCoordinator]):
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator, topic_prefix: str, bat_id: int):
+    def __init__(self, coordinator, stack_id: str, bat_id: int):
         super().__init__(coordinator)
-        self._stack_id = stack_id_from_topic(topic_prefix)
+        self._stack_id = stack_id
         self._bat_id = bat_id
 
     @property
@@ -82,8 +97,8 @@ class PylontechBatteryEntity(CoordinatorEntity[PylontechCoordinator]):
 class PylontechCellEntity(PylontechBatteryEntity):
     """Base class for per-cell entities, attached to the parent battery module device."""
 
-    def __init__(self, coordinator, topic_prefix: str, bat_id: int, cell_id: int):
-        super().__init__(coordinator, topic_prefix, bat_id)
+    def __init__(self, coordinator, stack_id: str, bat_id: int, cell_id: int):
+        super().__init__(coordinator, stack_id, bat_id)
         self._cell_id = cell_id
 
     @property

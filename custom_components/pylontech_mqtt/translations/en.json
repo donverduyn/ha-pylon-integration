@@ -8,6 +8,7 @@
       "already_configured": "A Pylontech entry already uses this broker and topic",
       "cannot_connect": "Failed to connect to MQTT broker",
       "invalid_auth": "Invalid username or password",
+      "invalid_topic": "Topic prefix must not contain '#', '+', leading/trailing slashes, or whitespace",
       "unknown": "Unexpected error"
     },
     "step": {

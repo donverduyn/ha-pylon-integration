@@ -5,6 +5,7 @@ socket, rather than mocking send/recv — the whole point of the fix is
 correct behavior against real (if simulated) response timing.
 """
 
+import socket
 import time
 
 import main
@@ -68,3 +69,51 @@ class TestBmsConnectionTcp:
         """Even an error response ends in a prompt and must be read in full."""
         resp = tcp_bms.send_command("not_a_real_command")
         assert "pylon>" in resp
+
+
+class TestReadUntilPromptTruncation:
+    """A response is either complete (terminated by the "pylon>" prompt) or
+    an exception — it must never come back as a silently-accepted partial
+    fragment (see BmsConnection._read_until_prompt)."""
+
+    def _connection(self, monkeypatch, read_timeout: float = 0.3) -> "main.BmsConnection":
+        monkeypatch.setattr(main, "CONNECTION_TYPE", "tcp")
+        monkeypatch.setattr(main, "_READ_TIMEOUT", read_timeout)
+        return main.BmsConnection()
+
+    def test_timeout_before_prompt_raises(self, monkeypatch) -> None:
+        conn = self._connection(monkeypatch)
+        server, client = socket.socketpair()
+        conn._tcp = client
+        try:
+            server.sendall(b"Power Volt Curr ...\n1 51200 100")  # no prompt, ever
+            with pytest.raises(TimeoutError):
+                conn._read_until_prompt()
+        finally:
+            server.close()
+            client.close()
+
+    def test_remote_close_before_prompt_raises(self, monkeypatch) -> None:
+        conn = self._connection(monkeypatch, read_timeout=2.0)
+        server, client = socket.socketpair()
+        conn._tcp = client
+        try:
+            server.sendall(b"Power Volt Curr ...\n1 51200 100")
+            server.close()  # hang up mid-response, before the prompt
+            with pytest.raises(ConnectionError):
+                conn._read_until_prompt()
+        finally:
+            client.close()
+
+    def test_response_with_prompt_returns_in_full(self, monkeypatch) -> None:
+        conn = self._connection(monkeypatch, read_timeout=2.0)
+        server, client = socket.socketpair()
+        conn._tcp = client
+        try:
+            server.sendall(b"Command completed successfully\r\npylon>")
+            data = conn._read_until_prompt()
+            assert b"pylon>" in data
+            assert b"Command completed successfully" in data
+        finally:
+            server.close()
+            client.close()

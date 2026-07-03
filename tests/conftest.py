@@ -81,6 +81,7 @@ PATCH_SETUP = "custom_components.pylontech_mqtt.coordinator.PylontechCoordinator
 def make_coordinator(hass, *, topic_prefix: str = "pylontech/stack"):
     """Build a bare PylontechCoordinator wired to *hass* (MQTT client not started)."""
     from custom_components.pylontech_mqtt.coordinator import PylontechCoordinator
+    from custom_components.pylontech_mqtt.entity import stack_id_from_broker
 
     return PylontechCoordinator(
         hass=hass,
@@ -89,6 +90,7 @@ def make_coordinator(hass, *, topic_prefix: str = "pylontech/stack"):
         mqtt_user="",
         mqtt_pass="",
         topic_prefix=topic_prefix,
+        stack_id=stack_id_from_broker("localhost", 1883, topic_prefix),
     )
 
 

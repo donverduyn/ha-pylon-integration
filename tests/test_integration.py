@@ -4,12 +4,14 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
+from conftest import PATCH_CONN as _PATCH_CONN
 from conftest import PATCH_SETUP as _PATCH_SETUP
 from conftest import create_config_entry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from custom_components.pylontech_mqtt.const import DOMAIN
+from custom_components.pylontech_mqtt.entity import stack_id_from_broker
 
 # ---------------------------------------------------------------------------
 # Shared test data
@@ -23,10 +25,11 @@ _ENTRY_DATA: dict[str, Any] = {
     "mqtt_topic": "pylontech/stack",
 }
 
-# Entity/device identity is derived from the topic prefix (see
-# entity.stack_id_from_topic), not entry.entry_id — this must match
-# _ENTRY_DATA["mqtt_topic"] with "/" replaced by "_".
-_STACK_ID = "pylontech_stack"
+# Entity/device identity is derived from host+port+topic (see
+# entity.stack_id_from_broker), not entry.entry_id.
+_STACK_ID = stack_id_from_broker(
+    _ENTRY_DATA["mqtt_host"], _ENTRY_DATA["mqtt_port"], _ENTRY_DATA["mqtt_topic"]
+)
 
 _PAYLOAD: dict[str, Any] = {
     "voltage": 51.2,
@@ -242,6 +245,52 @@ class TestUnloadEntry:
         )
 
 
+class TestLegacyOptionsDoNotOverrideData:
+    """A now-removed OptionsFlow used to write broker settings into
+    entry.options while entry.data held whatever was set at initial setup.
+    entry.data is now the single source of truth (kept current by
+    async_step_reconfigure); a stale entry.options must never shadow it, and
+    must be purged so an old, rotated password doesn't linger in storage.
+    """
+
+    async def test_entry_data_wins_over_stale_options(
+        self, hass: HomeAssistant
+    ) -> None:
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data={**_ENTRY_DATA, "mqtt_pass": "current-password"},
+            options={**_ENTRY_DATA, "mqtt_pass": "stale-password"},
+        )
+        entry.add_to_hass(hass)
+
+        with patch(_PATCH_SETUP):
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        coordinator = hass.data[DOMAIN][entry.entry_id]
+        assert coordinator._mqtt_pass == "current-password"
+
+    async def test_stale_options_are_purged_on_setup(
+        self, hass: HomeAssistant
+    ) -> None:
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            data=_ENTRY_DATA,
+            options={"mqtt_pass": "stale-password"},
+        )
+        entry.add_to_hass(hass)
+
+        with patch(_PATCH_SETUP):
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+        assert entry.options == {}
+
+
 class TestRegistryIdentityMigration:
     """Entities/devices created under the legacy entry-id-based scheme must be
     renamed in place to the topic-based scheme on the next setup, rather than
@@ -303,3 +352,42 @@ class TestRegistryIdentityMigration:
         ent_reg = er.async_get(hass)
         for entity in er.async_entries_for_config_entry(ent_reg, entry.entry_id):
             assert not entity.unique_id.startswith(entry.entry_id)
+
+    async def test_reconfigure_topic_change_migrates_registry_identity(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Changing the topic via reconfigure must carry existing entities
+        forward to the new identity instead of orphaning them — the hidden
+        "_stack_id" token __init__ persists across the reconfigure's data
+        overwrite is what makes this possible (see config_flow.
+        async_step_reconfigure and __init__._migrate_registry_identity)."""
+        from homeassistant import config_entries as ce
+
+        entry, _ = await _create_entry(hass)
+        ent_reg = er.async_get(hass)
+        old_entity_id = ent_reg.async_get_entity_id(
+            "sensor", DOMAIN, f"{_STACK_ID}_voltage"
+        )
+        assert old_entity_id is not None
+
+        new_topic = "pylontech/stack2"
+        new_stack_id = stack_id_from_broker(
+            _ENTRY_DATA["mqtt_host"], _ENTRY_DATA["mqtt_port"], new_topic
+        )
+
+        with patch(_PATCH_CONN, return_value=None), patch(_PATCH_SETUP):
+            reconf = await hass.config_entries.flow.async_init(
+                DOMAIN,
+                context={
+                    "source": ce.SOURCE_RECONFIGURE,
+                    "entry_id": entry.entry_id,
+                },
+            )
+            await hass.config_entries.flow.async_configure(
+                reconf["flow_id"], {**_ENTRY_DATA, "mqtt_topic": new_topic}
+            )
+            await hass.async_block_till_done()
+
+        migrated = ent_reg.async_get(old_entity_id)
+        assert migrated is not None
+        assert migrated.unique_id == f"{new_stack_id}_voltage"

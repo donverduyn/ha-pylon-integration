@@ -25,6 +25,7 @@ class PylontechCoordinator(DataUpdateCoordinator[dict]):
         mqtt_user: str,
         mqtt_pass: str,
         topic_prefix: str,
+        stack_id: str,
         default_capacity: float = DEFAULT_BATTERY_CAPACITY,
     ) -> None:
         # No update_interval — data arrives via push, not polling.
@@ -35,6 +36,7 @@ class PylontechCoordinator(DataUpdateCoordinator[dict]):
         self._mqtt_user = mqtt_user
         self._mqtt_pass = mqtt_pass
         self.topic_prefix = topic_prefix
+        self.stack_id = stack_id
         self._state_topic = f"{topic_prefix}/state"
         self._avail_topic = f"{topic_prefix}/availability"
         self._client: mqtt.Client | None = None

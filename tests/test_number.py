@@ -20,6 +20,7 @@ from homeassistant.helpers import entity_registry as er
 
 from custom_components.pylontech_mqtt.const import DOMAIN
 from custom_components.pylontech_mqtt.coordinator import PylontechCoordinator
+from custom_components.pylontech_mqtt.entity import stack_id_from_broker
 from custom_components.pylontech_mqtt.number import PylontechBatteryCapacityNumber
 
 # ---------------------------------------------------------------------------
@@ -58,10 +59,11 @@ _ENTRY_DATA: dict = {
     "mqtt_topic": "pylontech/stack",
 }
 
-# Entity identity is derived from the topic prefix (see
-# entity.stack_id_from_topic) — must match _ENTRY_DATA["mqtt_topic"] with
-# "/" replaced by "_".
-_STACK_ID = "pylontech_stack"
+# Entity identity is derived from host+port+topic (see
+# entity.stack_id_from_broker).
+_STACK_ID = stack_id_from_broker(
+    _ENTRY_DATA["mqtt_host"], _ENTRY_DATA["mqtt_port"], _ENTRY_DATA["mqtt_topic"]
+)
 
 # ---------------------------------------------------------------------------
 # Fixtures

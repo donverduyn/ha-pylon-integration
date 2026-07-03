@@ -102,6 +102,27 @@ def _mqtt_unique_id(host: str, port: int, topic: str) -> str:
     return f"{host}:{port}:{topic}"
 
 
+def _invalid_topic_prefix(topic: str) -> bool:
+    """Return True if *topic* would break MQTT subscribe/publish at runtime.
+
+    "#" and "+" are MQTT wildcard characters — legal in a subscription
+    *filter* but not in a literal topic. Both the sidecar and this
+    integration publish/subscribe using topic_prefix + "/state" verbatim,
+    so a prefix containing either raises ValueError deep inside paho-mqtt
+    at runtime, well after this form has already accepted it. Leading/
+    trailing slashes and whitespace are rejected too, since they produce a
+    prefix that doesn't round-trip cleanly through "{prefix}/state".
+    """
+    return (
+        not topic
+        or topic != topic.strip()
+        or "#" in topic
+        or "+" in topic
+        or topic.startswith("/")
+        or topic.endswith("/")
+    )
+
+
 async def _validate_broker(
     hass, host: str, port: int, user_input: dict
 ) -> str | None:
@@ -137,18 +158,21 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             host = user_input[CONF_MQTT_HOST]
             port = user_input[CONF_MQTT_PORT]
 
-            conn_error = await _validate_broker(self.hass, host, port, user_input)
-            if conn_error:
-                errors["base"] = conn_error
+            if _invalid_topic_prefix(user_input[CONF_MQTT_TOPIC]):
+                errors["mqtt_topic"] = "invalid_topic"
             else:
-                await self.async_set_unique_id(
-                    _mqtt_unique_id(host, port, user_input[CONF_MQTT_TOPIC])
-                )
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=f"Pylontech ({host})",
-                    data=user_input,
-                )
+                conn_error = await _validate_broker(self.hass, host, port, user_input)
+                if conn_error:
+                    errors["base"] = conn_error
+                else:
+                    await self.async_set_unique_id(
+                        _mqtt_unique_id(host, port, user_input[CONF_MQTT_TOPIC])
+                    )
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(
+                        title=f"Pylontech ({host})",
+                        data=user_input,
+                    )
 
         return self.async_show_form(
             step_id="user",
@@ -171,28 +195,41 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             host = user_input[CONF_MQTT_HOST]
             port = user_input[CONF_MQTT_PORT]
 
-            conn_error = await _validate_broker(self.hass, host, port, user_input)
-            if conn_error:
-                errors["base"] = conn_error
+            if _invalid_topic_prefix(user_input[CONF_MQTT_TOPIC]):
+                errors["mqtt_topic"] = "invalid_topic"
             else:
-                new_unique_id = _mqtt_unique_id(host, port, user_input[CONF_MQTT_TOPIC])
-                for other in self.hass.config_entries.async_entries(DOMAIN):
-                    if other.entry_id == reconfigure_entry.entry_id:
-                        continue
-                    other_unique_id = _mqtt_unique_id(
-                        other.data.get(CONF_MQTT_HOST, ""),
-                        other.data.get(CONF_MQTT_PORT, DEFAULT_MQTT_PORT),
-                        other.data.get(CONF_MQTT_TOPIC, DEFAULT_MQTT_TOPIC),
-                    )
-                    if other.unique_id == new_unique_id or other_unique_id == new_unique_id:
-                        errors["base"] = "already_configured"
-                        break
+                conn_error = await _validate_broker(self.hass, host, port, user_input)
+                if conn_error:
+                    errors["base"] = conn_error
                 else:
-                    return self.async_update_reload_and_abort(
-                        reconfigure_entry,
-                        unique_id=new_unique_id,
-                        data=user_input,
+                    new_unique_id = _mqtt_unique_id(
+                        host, port, user_input[CONF_MQTT_TOPIC]
                     )
+                    for other in self.hass.config_entries.async_entries(DOMAIN):
+                        if other.entry_id == reconfigure_entry.entry_id:
+                            continue
+                        other_unique_id = _mqtt_unique_id(
+                            other.data.get(CONF_MQTT_HOST, ""),
+                            other.data.get(CONF_MQTT_PORT, DEFAULT_MQTT_PORT),
+                            other.data.get(CONF_MQTT_TOPIC, DEFAULT_MQTT_TOPIC),
+                        )
+                        if (
+                            other.unique_id == new_unique_id
+                            or other_unique_id == new_unique_id
+                        ):
+                            errors["base"] = "already_configured"
+                            break
+                    else:
+                        return self.async_update_reload_and_abort(
+                            reconfigure_entry,
+                            unique_id=new_unique_id,
+                            # Merge onto the existing data rather than replacing
+                            # it outright, so hidden non-schema keys (e.g. the
+                            # registry-identity token __init__ stashes there)
+                            # survive the update instead of being silently
+                            # dropped and losing their migration trail.
+                            data={**reconfigure_entry.data, **user_input},
+                        )
 
         return self.async_show_form(
             step_id="reconfigure",
