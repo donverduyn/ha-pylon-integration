@@ -8,7 +8,9 @@
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers-extra/features/claude-code:2": {},
     "ghcr.io/devcontainers-extra/features/opencode:1": {},
-    "ghcr.io/devcontainers-extra/features/uv:1": {}
+    "ghcr.io/devcontainers-extra/features/uv:1": {},
+    "ghcr.io/devcontainers/features/node:2": {},
+    "ghcr.io/devcontainers/features/copilot-cli:1": {}
   },
   "containerEnv": {
     "VIRTUAL_ENV": "/home/vscode/.venv"
@@ -19,9 +21,13 @@
   // container exists to query, so `${containerEnv:PATH}` can't resolve there and ends up literal
   // — which clobbers PATH entirely and breaks the container before it even starts.
   "remoteEnv": {
-    "PATH": "/home/vscode/.venv/bin:${containerEnv:PATH}"
+    "PATH": "/home/vscode/.venv/bin:/usr/local/share/nvm/current/bin:${containerEnv:PATH}"
   },
   "postCreateCommand": "bash .devcontainer/postCreate.sh",
+  // Default waitFor is "updateContentCommand", so VS Code attaches and reads
+  // python.defaultInterpreterPath before postCreateCommand has created the venv, causing
+  // a spurious "no interpreter at path" warning on every fresh container. Block on it instead.
+  "waitFor": "postCreateCommand",
   "customizations": {
     "vscode": {
       "extensions": [

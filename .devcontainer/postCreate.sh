@@ -6,6 +6,9 @@ set -e
 sudo apt-get update
 sudo apt-get install -y xdg-utils
 
+npm install -g @openai/codex
+npm install -g @kilocode/cli
+
 # /usr/local's site-packages is root-owned, so deps can't install into the base image's
 # system Python as the vscode user. Use a uv-managed venv instead: uv is fast enough that
 # recreating it on every container create isn't the bottleneck a plain pip venv was.
@@ -23,3 +26,10 @@ sudo tee /etc/profile.d/00-venv.sh > /dev/null <<'EOF'
 export VIRTUAL_ENV=/home/vscode/.venv
 export PATH="$VIRTUAL_ENV/bin:$PATH"
 EOF
+
+# Lets locally-installed npm CLI tools (e.g. from devDependencies) run by name from an
+# interactive shell without npx/npm run. Deliberately only in .bashrc, not devcontainer.json's
+# remoteEnv or /etc/profile.d: PATH resolves "./node_modules/.bin" relative to cwd on every
+# lookup, so putting it in a shell rc keeps the risk scoped to interactive terminals the
+# user opens, not every process VS Code spawns in every directory.
+grep -qF 'node_modules/.bin' /home/vscode/.bashrc || echo 'export PATH="./node_modules/.bin:$PATH"' >> /home/vscode/.bashrc
