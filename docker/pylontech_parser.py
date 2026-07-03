@@ -185,6 +185,13 @@ class PylontechParser:
             current_system.power = round(
                 current_system.voltage * current_system.current, 1
             )
+        else:
+            # No valid battery rows — reset system totals so we never publish
+            # stale readings alongside an empty battery list.
+            current_system.voltage = 0.0
+            current_system.current = 0.0
+            current_system.soc = 0.0
+            current_system.power = 0.0
 
         return current_system
 

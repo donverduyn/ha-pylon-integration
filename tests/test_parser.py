@@ -974,3 +974,34 @@ class TestParseBat:
         assert len(bat.cells) == 1
         assert bat.cells[0].cell_id == 1
         assert any("Error parsing bat line" in r.message for r in caplog.records)
+
+    def test_all_absent_zeroes_system_metrics(self):
+        """When every battery row is Absent, system voltage/current/soc/power
+        must be reset to 0 rather than retaining stale previous values.
+
+        Without the fix, parse_pwr only enters the ``if valid_lines > 0:``
+        branch, leaving the previous values on the system object intact while
+        setting batteries = []  — an inconsistent state.
+        """
+        from pylontech_parser import PylontechParser
+        from structs import PylontechSystem
+
+        raw = (
+            "pwr\r\n"
+            "Power  Volt   Curr   Tempr  Tlow   Thigh  Vlow   Vhigh  "
+            "Base.St Volt.St Curr.St Temp.St Coulomb Time           B.V.St B.T.St\r\n"
+            "1      50200  10000  25000  24500  25500  3350   3360   "
+            "Absent  Normal  Normal  Normal  80%    2025-01-01 12:00:00  Normal Normal\r\n"
+            "2      50100  9900   25100  24600  25400  3340   3370   "
+            "Absent  Normal  Normal  Normal  79%    2025-01-01 12:00:00  Normal Normal\r\n"
+            "Command completed successfully\r\npylon>"
+        )
+        # Start with a system that already has non-zero totals from a previous poll.
+        system = PylontechSystem(51.0, 20.0, 80.0, 1020.0, 0.0, 0.0, 0.0)
+        PylontechParser.parse_pwr(raw, system)
+
+        assert system.batteries == []
+        assert system.voltage == 0.0
+        assert system.current == 0.0
+        assert system.soc == 0.0
+        assert system.power == 0.0

@@ -125,6 +125,12 @@ class PylontechCoordinator(DataUpdateCoordinator[dict]):
 
     def _process_payload(self, payload: dict) -> None:
         """Deserialize and update coordinator data. Always called on the HA event loop."""
+        if not isinstance(payload, dict):
+            _LOGGER.error(
+                "Unexpected MQTT payload type '%s' — expected a JSON object; dropping",
+                type(payload).__name__,
+            )
+            return
         try:
             system = self._deserialize(payload)
             # On the first payload that includes a parseable spec string (e.g.

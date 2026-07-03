@@ -470,3 +470,22 @@ class TestOnMessageErrors:
         )
         await hass.async_block_till_done()
         assert coordinator.data is None
+
+    async def test_non_dict_json_payload_is_rejected(
+        self, hass: HomeAssistant, coordinator: PylontechCoordinator
+    ) -> None:
+        """A valid JSON payload that is not a dict (e.g. null, list, int) must
+        be logged and dropped without updating coordinator.data."""
+        import json
+
+        for bad_value in ("null", "[]", "123"):
+            coordinator._on_message(
+                None,
+                None,
+                SimpleNamespace(
+                    topic="pylontech/stack/state",
+                    payload=bad_value.encode(),
+                ),
+            )
+        await hass.async_block_till_done()
+        assert coordinator.data is None
