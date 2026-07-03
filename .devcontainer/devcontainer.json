@@ -10,18 +10,18 @@
     "ghcr.io/devcontainers-extra/features/opencode:1": {},
     "ghcr.io/devcontainers-extra/features/uv:1": {}
   },
-  // Put the venv's bin dir on PATH for every shell (equivalent to `source .venv/bin/activate`
-  // but applies to non-interactive shells and VS Code's integrated terminal too).
   "containerEnv": {
-    "VIRTUAL_ENV": "${containerWorkspaceFolder}/.venv",
-    "PATH": "${containerWorkspaceFolder}/.venv/bin:${containerEnv:PATH}"
+    "VIRTUAL_ENV": "/home/vscode/.venv"
   },
-  // /usr/local's site-packages is root-owned, so deps can't install into the base image's
-  // system Python as the vscode user. Use a uv-managed venv instead: uv is fast enough that
-  // recreating it on every container create isn't the bottleneck a plain pip venv was.
-  // xdg-utils provides xdg-open, which opencode/other CLIs shell out to for browser-based
-  // auth flows; without it, browser launches silently fail even though $BROWSER is set.
-  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y xdg-utils && uv venv .venv && uv pip install --python .venv/bin/python -r requirements_dev.txt",
+  // Put the venv's bin dir on PATH for every shell (equivalent to `source .venv/bin/activate`
+  // but applies to non-interactive shells and VS Code's integrated terminal too). This must be
+  // remoteEnv, not containerEnv: containerEnv is baked into the initial `docker run`, before a
+  // container exists to query, so `${containerEnv:PATH}` can't resolve there and ends up literal
+  // — which clobbers PATH entirely and breaks the container before it even starts.
+  "remoteEnv": {
+    "PATH": "/home/vscode/.venv/bin:${containerEnv:PATH}"
+  },
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -30,7 +30,7 @@
         "charliermarsh.ruff"
       ],
       "settings": {
-        "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
+        "python.defaultInterpreterPath": "/home/vscode/.venv/bin/python",
         "python.analysis.typeCheckingMode": "basic",
         "python.analysis.extraPaths": [
           "${workspaceFolder}/custom_components"
