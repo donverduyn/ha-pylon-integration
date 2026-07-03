@@ -6,6 +6,15 @@ are the primary output users see in the dashboard.
 """
 
 import pytest
+from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
+from homeassistant.const import (
+    PERCENTAGE,
+    UnitOfElectricCurrent,
+    UnitOfElectricPotential,
+    UnitOfEnergy,
+    UnitOfPower,
+    UnitOfTemperature,
+)
 from homeassistant.core import HomeAssistant
 
 from custom_components.pylontech_mqtt.const import DOMAIN
@@ -276,3 +285,148 @@ class TestDeviceInfo:
         self, coord_with_data: PylontechCoordinator
     ) -> None:
         assert _cell(coord_with_data, "voltage").name == "Cell 0 Voltage"
+
+
+# ===========================================================================
+# Sensor metadata — unit_of_measurement, device_class, state_class
+# Protects the HA energy dashboard and device history from regressions.
+# ===========================================================================
+
+
+class TestSensorMetadata:
+    # --- System sensors ---
+
+    def test_system_voltage_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _sys(coord, "voltage").native_unit_of_measurement
+            == UnitOfElectricPotential.VOLT
+        )
+
+    def test_system_voltage_device_class(self, coord: PylontechCoordinator) -> None:
+        assert _sys(coord, "voltage").device_class == SensorDeviceClass.VOLTAGE
+
+    def test_system_voltage_state_class(self, coord: PylontechCoordinator) -> None:
+        assert _sys(coord, "voltage").state_class == SensorStateClass.MEASUREMENT
+
+    def test_system_current_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _sys(coord, "current").native_unit_of_measurement
+            == UnitOfElectricCurrent.AMPERE
+        )
+
+    def test_system_soc_unit(self, coord: PylontechCoordinator) -> None:
+        assert _sys(coord, "soc").native_unit_of_measurement == PERCENTAGE
+
+    def test_system_soc_device_class(self, coord: PylontechCoordinator) -> None:
+        assert _sys(coord, "soc").device_class == SensorDeviceClass.BATTERY
+
+    def test_system_power_unit(self, coord: PylontechCoordinator) -> None:
+        assert _sys(coord, "power").native_unit_of_measurement == UnitOfPower.WATT
+
+    def test_system_power_device_class(self, coord: PylontechCoordinator) -> None:
+        assert _sys(coord, "power").device_class == SensorDeviceClass.POWER
+
+    def test_system_energy_in_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _sys(coord, "energy_in").native_unit_of_measurement
+            == UnitOfEnergy.KILO_WATT_HOUR
+        )
+
+    def test_system_energy_in_device_class(self, coord: PylontechCoordinator) -> None:
+        assert _sys(coord, "energy_in").device_class == SensorDeviceClass.ENERGY
+
+    def test_system_energy_in_state_class_is_total(
+        self, coord: PylontechCoordinator
+    ) -> None:
+        """energy_in must use TOTAL (not TOTAL_INCREASING) to support resets."""
+        assert _sys(coord, "energy_in").state_class == SensorStateClass.TOTAL
+
+    def test_system_energy_out_state_class_is_total(
+        self, coord: PylontechCoordinator
+    ) -> None:
+        assert _sys(coord, "energy_out").state_class == SensorStateClass.TOTAL
+
+    def test_system_energy_stored_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _sys(coord, "energy_stored").native_unit_of_measurement
+            == UnitOfEnergy.KILO_WATT_HOUR
+        )
+
+    def test_system_energy_stored_device_class(
+        self, coord: PylontechCoordinator
+    ) -> None:
+        assert (
+            _sys(coord, "energy_stored").device_class
+            == SensorDeviceClass.ENERGY_STORAGE
+        )
+
+    def test_system_energy_stored_state_class(
+        self, coord: PylontechCoordinator
+    ) -> None:
+        assert _sys(coord, "energy_stored").state_class == SensorStateClass.MEASUREMENT
+
+    # --- Battery sensors ---
+
+    def test_battery_voltage_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _bat(coord, "voltage").native_unit_of_measurement
+            == UnitOfElectricPotential.VOLT
+        )
+
+    def test_battery_voltage_device_class(self, coord: PylontechCoordinator) -> None:
+        assert _bat(coord, "voltage").device_class == SensorDeviceClass.VOLTAGE
+
+    def test_battery_current_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _bat(coord, "current").native_unit_of_measurement
+            == UnitOfElectricCurrent.AMPERE
+        )
+
+    def test_battery_temperature_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _bat(coord, "temperature").native_unit_of_measurement
+            == UnitOfTemperature.CELSIUS
+        )
+
+    def test_battery_temperature_device_class(
+        self, coord: PylontechCoordinator
+    ) -> None:
+        assert _bat(coord, "temperature").device_class == SensorDeviceClass.TEMPERATURE
+
+    def test_battery_soc_unit(self, coord: PylontechCoordinator) -> None:
+        assert _bat(coord, "soc").native_unit_of_measurement == PERCENTAGE
+
+    def test_battery_soc_device_class(self, coord: PylontechCoordinator) -> None:
+        assert _bat(coord, "soc").device_class == SensorDeviceClass.BATTERY
+
+    def test_battery_power_unit(self, coord: PylontechCoordinator) -> None:
+        assert _bat(coord, "power").native_unit_of_measurement == UnitOfPower.WATT
+
+    def test_battery_power_state_class(self, coord: PylontechCoordinator) -> None:
+        assert _bat(coord, "power").state_class == SensorStateClass.MEASUREMENT
+
+    # --- Cell sensors ---
+
+    def test_cell_voltage_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _cell(coord, "voltage").native_unit_of_measurement
+            == UnitOfElectricPotential.VOLT
+        )
+
+    def test_cell_voltage_device_class(self, coord: PylontechCoordinator) -> None:
+        assert _cell(coord, "voltage").device_class == SensorDeviceClass.VOLTAGE
+
+    def test_cell_voltage_state_class(self, coord: PylontechCoordinator) -> None:
+        assert _cell(coord, "voltage").state_class == SensorStateClass.MEASUREMENT
+
+    def test_cell_temperature_unit(self, coord: PylontechCoordinator) -> None:
+        assert (
+            _cell(coord, "temperature").native_unit_of_measurement
+            == UnitOfTemperature.CELSIUS
+        )
+
+    def test_cell_soc_unit(self, coord: PylontechCoordinator) -> None:
+        assert _cell(coord, "soc").native_unit_of_measurement == PERCENTAGE
+
+    def test_cell_soc_device_class(self, coord: PylontechCoordinator) -> None:
+        assert _cell(coord, "soc").device_class == SensorDeviceClass.BATTERY
