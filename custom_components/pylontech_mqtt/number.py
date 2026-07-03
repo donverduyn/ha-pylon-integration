@@ -50,7 +50,7 @@ class PylontechBatteryCapacityNumber(PylontechBatteryEntity, RestoreNumber):
         unique_id_prefix: str,
         bat_id: int,
     ) -> None:
-        super().__init__(coordinator, bat_id)
+        super().__init__(coordinator, unique_id_prefix, bat_id)
 
         self._attr_unique_id = f"{unique_id_prefix}_bat{bat_id}_capacity"
         self._attr_translation_key = "battery_capacity"

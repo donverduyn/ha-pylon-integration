@@ -88,6 +88,10 @@ def _broker_schema(
     )
 
 
+def _mqtt_unique_id(host: str, port: int, topic: str) -> str:
+    return f"{host}:{port}:{topic}"
+
+
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Pylontech MQTT."""
 
@@ -118,7 +122,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = conn_error
             else:
                 await self.async_set_unique_id(
-                    f"{host}:{port}:{user_input[CONF_MQTT_TOPIC]}"
+                    _mqtt_unique_id(host, port, user_input[CONF_MQTT_TOPIC])
                 )
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(
@@ -164,15 +168,36 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             if conn_error:
                 errors["base"] = conn_error
             else:
-                new_unique_id = f"{host}:{port}:{user_input[CONF_MQTT_TOPIC]}"
+                new_unique_id = _mqtt_unique_id(
+                    host, port, user_input[CONF_MQTT_TOPIC]
+                )
                 for other in self.hass.config_entries.async_entries(DOMAIN):
+                    other_host = other.options.get(
+                        CONF_MQTT_HOST, other.data.get(CONF_MQTT_HOST, "")
+                    )
+                    other_port = other.options.get(
+                        CONF_MQTT_PORT, other.data.get(CONF_MQTT_PORT, DEFAULT_MQTT_PORT)
+                    )
+                    other_topic = other.options.get(
+                        CONF_MQTT_TOPIC,
+                        other.data.get(CONF_MQTT_TOPIC, DEFAULT_MQTT_TOPIC),
+                    )
+                    other_effective_unique_id = _mqtt_unique_id(
+                        other_host, other_port, other_topic
+                    )
                     if (
                         other.entry_id != self.config_entry.entry_id
-                        and other.unique_id == new_unique_id
+                        and (
+                            other.unique_id == new_unique_id
+                            or other_effective_unique_id == new_unique_id
+                        )
                     ):
                         errors["base"] = "already_configured"
                         break
                 else:
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, unique_id=new_unique_id
+                    )
                     return self.async_create_entry(title="", data=user_input)
 
         entry = self.config_entry

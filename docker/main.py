@@ -293,7 +293,6 @@ def main() -> None:
             _LOGGER.error("MQTT connect failed: %s", reason_code)
         else:
             _LOGGER.info("MQTT connected")
-            c.publish(AVAIL_TOPIC, "online", retain=True)
 
     def on_disconnect(c, userdata, disconnect_flags, reason_code, properties):  # noqa: ANN001
         _LOGGER.warning("MQTT disconnected: %s", reason_code)
@@ -375,6 +374,7 @@ def main() -> None:
 
             payload = json.dumps(asdict(system), default=str)
             client.publish(STATE_TOPIC, payload, retain=True)
+            client.publish(AVAIL_TOPIC, "online", retain=True)
             _LOGGER.info(
                 "Published | V=%.2fV I=%.2fA SOC=%.1f%% P=%.1fW batteries=%d cells=%d",
                 system.voltage,
@@ -387,6 +387,7 @@ def main() -> None:
 
         except (serial.SerialException, OSError, IOError) as err:
             _LOGGER.error("BMS connection error: %s — reconnecting in 5 s", err)
+            client.publish(AVAIL_TOPIC, "offline", retain=True)
             bms.close()
             energy.invalidate_last_time()
             info_fetched = False
@@ -394,13 +395,15 @@ def main() -> None:
             continue
         except KeyboardInterrupt:
             _LOGGER.info("Shutting down...")
-            client.publish(AVAIL_TOPIC, "offline", retain=True)
+            msg = client.publish(AVAIL_TOPIC, "offline", retain=True)
+            msg.wait_for_publish(timeout=5)
             client.loop_stop()
             client.disconnect()
             bms.close()
             sys.exit(0)
         except Exception as err:
             _LOGGER.error("Unexpected error: %s", err, exc_info=True)
+            client.publish(AVAIL_TOPIC, "offline", retain=True)
             # Close the BMS connection so the next poll starts fresh; the
             # exception may have left the serial/TCP socket in a broken state.
             bms.close()

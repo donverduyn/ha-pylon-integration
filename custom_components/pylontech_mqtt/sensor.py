@@ -518,7 +518,7 @@ class PylontechSystemSensor(PylontechSystemEntity, SensorEntity):
         entry_id: str,
         description: SensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator)
+        super().__init__(coordinator, entry_id)
         self.entity_description = description
         self._attr_unique_id = f"{entry_id}_{description.key}"
 
@@ -541,7 +541,7 @@ class PylontechBatterySensor(PylontechBatteryEntity, SensorEntity):
         bat_id: int,
         description: SensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator, bat_id)
+        super().__init__(coordinator, entry_id, bat_id)
         self.entity_description = description
         self._attr_unique_id = f"{entry_id}_bat{bat_id}_{description.key}"
 
@@ -568,7 +568,7 @@ class PylontechCellSensor(PylontechCellEntity, SensorEntity):
         cell_id: int,
         description: SensorEntityDescription,
     ) -> None:
-        super().__init__(coordinator, bat_id, cell_id)
+        super().__init__(coordinator, entry_id, bat_id, cell_id)
         self.entity_description = description
         self._attr_unique_id = f"{entry_id}_bat{bat_id}_cell{cell_id}_{description.key}"
         self._attr_name = f"Cell {cell_id} {description.name}"

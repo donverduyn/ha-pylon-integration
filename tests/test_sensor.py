@@ -218,9 +218,10 @@ class TestDeviceInfo:
     async def test_system_identifier(
         self, coord_with_data: PylontechCoordinator
     ) -> None:
-        assert (DOMAIN, "system") in _sys(coord_with_data, "voltage").device_info.get(
-            "identifiers", set()
-        )
+        assert (
+            DOMAIN,
+            "entry_id_system",
+        ) in _sys(coord_with_data, "voltage").device_info.get("identifiers", set())
 
     async def test_system_name(self, coord_with_data: PylontechCoordinator) -> None:
         assert (
@@ -251,7 +252,7 @@ class TestDeviceInfo:
     async def test_battery_identifier(
         self, coord_with_data: PylontechCoordinator
     ) -> None:
-        assert (DOMAIN, "battery_1") in _bat(
+        assert (DOMAIN, "entry_id_battery_1") in _bat(
             coord_with_data, "voltage"
         ).device_info.get("identifiers", set())
 
@@ -268,7 +269,18 @@ class TestDeviceInfo:
     ) -> None:
         assert _bat(coord_with_data, "voltage").device_info.get("via_device") == (
             DOMAIN,
-            "system",
+            "entry_id_system",
+        )
+
+    async def test_different_entries_use_different_devices(
+        self, coord_with_data: PylontechCoordinator
+    ) -> None:
+        desc = next(d for d in SYSTEM_SENSORS if d.key == "voltage")
+        first = PylontechSystemSensor(coord_with_data, "entry_one", desc)
+        second = PylontechSystemSensor(coord_with_data, "entry_two", desc)
+
+        assert first.device_info.get("identifiers") != second.device_info.get(
+            "identifiers"
         )
 
     # --- cell entity uses parent battery device ---

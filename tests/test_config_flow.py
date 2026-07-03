@@ -209,6 +209,37 @@ async def test_options_updated_successfully(hass: HomeAssistant) -> None:
 
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"]["mqtt_host"] == "192.168.1.5"
+    assert entry.unique_id == "192.168.1.5:1883:pylontech/stack"
+
+
+async def test_options_update_rejects_duplicate_effective_settings(
+    hass: HomeAssistant,
+) -> None:
+    """Options changes must not allow two entries to use the same broker/topic."""
+    second_input = {**_VALID_INPUT, "mqtt_host": "192.168.1.6"}
+
+    with patch(_PATCH_CONN, return_value=None), patch(_PATCH_SETUP):
+        init1 = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        await hass.config_entries.flow.async_configure(init1["flow_id"], _VALID_INPUT)
+
+        init2 = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        await hass.config_entries.flow.async_configure(init2["flow_id"], second_input)
+
+        first_entry = hass.config_entries.async_entries(DOMAIN)[0]
+        opts = await hass.config_entries.options.async_init(first_entry.entry_id)
+        result = cast(
+            dict[str, Any],
+            await hass.config_entries.options.async_configure(
+                opts["flow_id"], second_input
+            ),
+        )
+
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"]["base"] == "already_configured"
 
 
 # ---------------------------------------------------------------------------
