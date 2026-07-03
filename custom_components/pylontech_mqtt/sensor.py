@@ -59,19 +59,25 @@ SYSTEM_SENSORS: tuple[SensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
     ),
     # --- Energy ---
+    # TOTAL_INCREASING (not TOTAL): the sidecar's energy_in/energy_out reset
+    # to 0 on every container restart, and no last_reset attribute is set.
+    # TOTAL_INCREASING auto-detects a value drop as the start of a new meter
+    # cycle when computing long-term statistics; plain TOTAL has no such
+    # handling without last_reset and would record a restart as a large
+    # negative delta, corrupting the Energy dashboard's cumulative sum.
     SensorEntityDescription(
         key="energy_in",
         translation_key="sys_energy_in",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     SensorEntityDescription(
         key="energy_out",
         translation_key="sys_energy_out",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL,
+        state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     SensorEntityDescription(
         key="energy_stored",

@@ -340,16 +340,21 @@ class TestSensorMetadata:
     def test_system_energy_in_device_class(self, coord: PylontechCoordinator) -> None:
         assert _sys(coord, "energy_in").device_class == SensorDeviceClass.ENERGY
 
-    def test_system_energy_in_state_class_is_total(
+    def test_system_energy_in_state_class_is_total_increasing(
         self, coord: PylontechCoordinator
     ) -> None:
-        """energy_in must use TOTAL (not TOTAL_INCREASING) to support resets."""
-        assert _sys(coord, "energy_in").state_class == SensorStateClass.TOTAL
+        """energy_in must use TOTAL_INCREASING so a sidecar-restart reset is
+        treated as a new meter cycle rather than corrupting long-term stats."""
+        assert (
+            _sys(coord, "energy_in").state_class == SensorStateClass.TOTAL_INCREASING
+        )
 
-    def test_system_energy_out_state_class_is_total(
+    def test_system_energy_out_state_class_is_total_increasing(
         self, coord: PylontechCoordinator
     ) -> None:
-        assert _sys(coord, "energy_out").state_class == SensorStateClass.TOTAL
+        assert (
+            _sys(coord, "energy_out").state_class == SensorStateClass.TOTAL_INCREASING
+        )
 
     def test_system_energy_stored_unit(self, coord: PylontechCoordinator) -> None:
         assert (
