@@ -21,12 +21,14 @@ All configuration is via environment variables:
                       well under the HA integration's 300s staleness
                       watchdog)
   AUTO_SYNC_TIME    : "true" to sync BMS clock on startup, default "false"
-  MONITORING_LEVEL  : "low", "medium", or "high" (default) — how much detail
+  MONITORING_LEVEL  : "low", "medium" (default), or "high" — how much detail
                       to walk per battery on top of the aggregate "pwr" table:
                         low    - aggregate "pwr" only
                         medium - adds per-battery "pwr N" detail (events/fault
                                  status the aggregate table doesn't expose)
-                        high   - adds per-cell "bat N" polling on top of medium
+                        high   - adds per-cell "bat N" polling on top of
+                                 medium — creates a further 9 HA entities per
+                                 cell, so opt in deliberately on large stacks
   MAX_BATTERIES     : upper bound on "pwr N" probes when the aggregate "pwr"
                       response is rejected, default 16
 """
@@ -100,7 +102,11 @@ POLL_INTERVAL = _int_env("POLL_INTERVAL", 15)
 # that watchdog would ever fire on a healthy, correctly-configured setup.
 _MAX_POLL_INTERVAL = 150
 AUTO_SYNC_TIME = os.getenv("AUTO_SYNC_TIME", "false").lower() == "true"
-MONITORING_LEVEL = os.getenv("MONITORING_LEVEL", "high").lower()
+# "high" adds a per-cell HA entity for every cell in the stack (9 entities
+# each) on top of "medium" — on a large stack (e.g. 16 modules x 15 cells)
+# that's thousands of extra entities and a proportional jump in poll-loop
+# round trips, so it must be opt-in rather than the default.
+MONITORING_LEVEL = os.getenv("MONITORING_LEVEL", "medium").lower()
 MAX_BATTERIES = _int_env("MAX_BATTERIES", 16)
 
 # Path where the energy counters are persisted across container restarts.
@@ -117,8 +123,12 @@ AVAIL_TOPIC = f"{MQTT_TOPIC_PREFIX}/availability"
 # sidecar/integration releases installed independently via Docker vs HACS.
 SCHEMA_VERSION = 1
 # Informational only (not compatibility-checked) — surfaced in HA diagnostics
-# so a bug report shows which sidecar build produced the data.
-SIDECAR_VERSION = "2.0.0"
+# so a bug report shows which sidecar build produced the data. Baked in by
+# docker/Dockerfile's GIT_SHA/SIDECAR_VERSION build args (see the release
+# workflow that sets them from the tag/commit being built); falls back to
+# these placeholders for a manual `python main.py` run outside Docker.
+SIDECAR_VERSION = os.getenv("SIDECAR_VERSION", "0.0.0-dev")
+GIT_SHA = os.getenv("GIT_SHA", "unknown")
 
 # ---------------------------------------------------------------------------
 # BMS connection
@@ -787,6 +797,7 @@ def main() -> None:
             payload_dict = asdict(system)
             payload_dict["schema_version"] = SCHEMA_VERSION
             payload_dict["sidecar_version"] = SIDECAR_VERSION
+            payload_dict["sidecar_commit"] = GIT_SHA
             payload = json.dumps(payload_dict, default=str)
             state_info = client.publish(STATE_TOPIC, payload, retain=True)
             avail_info = client.publish(AVAIL_TOPIC, "online", retain=True)
@@ -814,7 +825,14 @@ def main() -> None:
             bms.close()
             energy.invalidate_last_time()
             info_fetched = False
-            time.sleep(5)
+            # A KeyboardInterrupt raised here (SIGTERM landing mid-sleep) would
+            # otherwise propagate straight out of this except block — sibling
+            # except clauses on the same try don't catch exceptions raised
+            # while already handling one — skipping _clean_shutdown entirely.
+            try:
+                time.sleep(5)
+            except KeyboardInterrupt:
+                _clean_shutdown(client, bms, energy)
             continue
         except KeyboardInterrupt:
             _clean_shutdown(client, bms, energy)  # never returns — exits the process

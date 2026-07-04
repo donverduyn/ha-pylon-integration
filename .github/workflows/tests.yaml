@@ -9,6 +9,38 @@ permissions: {}
 
 jobs:
   pytest:
+    name: "pytest (${{ matrix.ha-version }})"
+    runs-on: "ubuntu-latest"
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # "current" tracks whatever HA version requirements_dev.lock.txt
+          # was last compiled against; "min" pins the version declared in
+          # hacs.json/manifest.json ("homeassistant": "2025.3.0" — tested at
+          # 2025.4.0 instead; see requirements_dev_min.txt for why every
+          # release between 2024.11 and 2025.4.0 is uninstallable or
+          # incompatible) so a change that only works on newer HA gets
+          # caught here instead of by a user still on the declared minimum.
+          - ha-version: current
+            lockfile: requirements_dev.lock.txt
+          - ha-version: min
+            lockfile: requirements_dev_min.lock.txt
+    steps:
+      - uses: "actions/checkout@v4"
+      - uses: "actions/setup-python@v6"
+        with:
+          python-version: "3.13"
+      - name: Install dependencies (HA ${{ matrix.ha-version }})
+        run: pip install --require-hashes -r ${{ matrix.lockfile }}
+      - name: Install Mosquitto (for the e2e tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mosquitto
+      - name: Run test suite
+        run: pytest
+      - name: Run e2e tests (real subprocesses, real timeouts/retries)
+        run: pytest -m e2e
+
+  lint:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v4"
@@ -17,14 +49,10 @@ jobs:
           python-version: "3.13"
       - name: Install dependencies
         run: pip install --require-hashes -r requirements_dev.lock.txt
-      - name: Install Mosquitto (for the e2e tests)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mosquitto
-      - name: Run test suite
-        run: pytest
-      - name: Run e2e tests (real subprocesses, real timeouts/retries)
-        run: pytest -m e2e
       - name: Ruff
         run: ruff check .
+      - name: Pyright
+        run: pyright
       - name: pip-audit (runtime dependencies)
         run: pip-audit -r requirements_runtime.txt
 
@@ -33,4 +61,8 @@ jobs:
     steps:
       - uses: "actions/checkout@v4"
       - name: Build the sidecar image
-        run: docker build -f docker/Dockerfile -t pylon2mqtt:ci .
+        run: |
+          docker build -f docker/Dockerfile \
+            --build-arg GIT_SHA="${{ github.sha }}" \
+            --build-arg SIDECAR_VERSION="ci-${{ github.sha }}" \
+            -t pylon2mqtt:ci .

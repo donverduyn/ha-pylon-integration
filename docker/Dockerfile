@@ -4,6 +4,17 @@
 # python:3.11.15-slim` or via the registry API) — do not just edit the tag.
 FROM python:3.11.15-slim@sha256:b27df5841f3355e9473f9a516d38a6783b6c8dfeacaf2d14a240f443b368ddb6
 
+# Set by the release workflow (.github/workflows/release.yaml) from the tag
+# and commit being built; left as placeholders for a manual `docker build`
+# so main.py's fallbacks (SIDECAR_VERSION/GIT_SHA env vars) are the only
+# other place that needs to agree on what "unknown" looks like.
+ARG GIT_SHA=unknown
+ARG SIDECAR_VERSION=0.0.0-dev
+
+LABEL org.opencontainers.image.source="https://github.com/donverduyn/ha-pylontech-mqtt" \
+      org.opencontainers.image.revision="${GIT_SHA}" \
+      org.opencontainers.image.version="${SIDECAR_VERSION}"
+
 WORKDIR /app
 
 # Exact versions match what's tested against (see requirements_dev.txt /
@@ -17,7 +28,9 @@ COPY docker/pylontech_parser.py .
 COPY docker/structs.py .
 COPY docker/main.py .
 
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    GIT_SHA=${GIT_SHA} \
+    SIDECAR_VERSION=${SIDECAR_VERSION}
 
 # Run as an unprivileged user rather than root. Membership in "dialout"
 # (present by default in Debian-based images) grants access to serial

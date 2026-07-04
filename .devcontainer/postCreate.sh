@@ -14,8 +14,12 @@ npm install -g @openai/codex @kilocode/cli
 # The venv lives outside the bind-mounted workspace (in the container's own filesystem)
 # so uv can hardlink from its cache instead of falling back to a full copy, and so every
 # Python import at runtime isn't paying bind-mount I/O overhead.
+# Installs from the same hash-pinned lock file CI uses (requirements_dev.lock.txt),
+# not the loose requirements_dev.txt it's compiled from — otherwise the devcontainer
+# silently drifts onto whatever's newest on PyPI (including newer Home Assistant
+# releases than CI tests against) while CI stays pinned.
 uv venv /home/vscode/.venv
-uv pip install --python /home/vscode/.venv/bin/python -r requirements_dev.txt
+uv pip install --python /home/vscode/.venv/bin/python --require-hashes -r requirements_dev.lock.txt
 
 # containerEnv/remoteEnv set PATH for processes VS Code itself launches, but a login shell
 # (bash -l) re-sources /etc/profile, which unconditionally resets PATH and wipes that out.

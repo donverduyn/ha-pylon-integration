@@ -8,6 +8,7 @@ pytest-homeassistant-custom-component
 
 # Code quality
 ruff
+pyright
 
 # Vulnerability scanning
 pip-audit
