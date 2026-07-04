@@ -18,7 +18,16 @@ npm install -g @openai/codex @kilocode/cli
 # not the loose requirements_dev.txt it's compiled from — otherwise the devcontainer
 # silently drifts onto whatever's newest on PyPI (including newer Home Assistant
 # releases than CI tests against) while CI stays pinned.
-uv venv /home/vscode/.venv
+#
+# --python 3.13 is required, not a default: the "uv" devcontainer feature installs
+# its own uv-managed Python (3.14 as of this writing) to /usr/local/bin, which uv
+# prefers over the base image's declared /usr/bin/python3.13 when unpinned. Left
+# unpinned, the venv silently ends up on whatever that happens to be — and the
+# lock file's pydantic-core version doesn't even have a 3.14 wheel yet, so
+# --require-hashes fails to build it and installs an unpinned newer one instead,
+# same drift as above but for the interpreter and one dependency at once. This
+# must track the base image tag and CI's actions/setup-python version above.
+uv venv --python 3.13 /home/vscode/.venv
 uv pip install --python /home/vscode/.venv/bin/python --require-hashes -r requirements_dev.lock.txt
 
 # containerEnv/remoteEnv set PATH for processes VS Code itself launches, but a login shell
