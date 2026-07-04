@@ -173,6 +173,84 @@ class TestParsePwr:
 
 
 # ===========================================================================
+# parse_pwr_indexed — vertical 'pwr N' block (fallback battery discovery)
+# ===========================================================================
+class TestParsePwrIndexed:
+    def test_valid_battery_returns_battery(self, _session_conn):
+        raw = _raw_command(_session_conn, "pwr 1")
+        bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert isinstance(bat, PylontechBattery)
+        assert bat.sys_id == 1
+
+    def test_voltage_current_temperature_scaled_from_milli(self, _session_conn):
+        raw = _raw_command(_session_conn, "pwr 1")
+        bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat.voltage > 0
+        assert bat.temperature > 0
+
+    def test_soc_matches_stub_start(self, _session_conn):
+        raw = _raw_command(_session_conn, "pwr 1")
+        bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat.soc == STUB_SOC_START
+
+    def test_power_is_voltage_times_current(self, _session_conn):
+        raw = _raw_command(_session_conn, "pwr 1")
+        bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat.power == pytest.approx(bat.voltage * bat.current, rel=1e-3)
+
+    def test_status_fields_populated(self, _session_conn):
+        raw = _raw_command(_session_conn, "pwr 1")
+        bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat.status
+        assert bat.volt_status == "Normal"
+        assert bat.curr_status == "Normal"
+        assert bat.temp_status == "Normal"
+        assert bat.coul_status == "Normal"
+
+    def test_events_parsed_as_numbers(self, _session_conn):
+        """Bat/Power Events are hex-formatted ("0x0") on the console; they
+        must come back as ints via parse_number, not raw strings."""
+        raw = _raw_command(_session_conn, "pwr 1")
+        bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat.bat_events == 0
+        assert bat.power_events == 0
+        assert bat.sys_fault == 0
+
+    def test_absent_slot_returns_none(self, _session_conn):
+        """Slot index beyond the configured battery count but within the
+        BMS's own slot count (STUB_BATTERIES=2, slot 3 of 8) is Absent."""
+        raw = _raw_command(_session_conn, "pwr 3")
+        assert PylontechParser.parse_pwr_indexed(raw, 3) is None
+
+    def test_out_of_range_returns_none(self, _session_conn):
+        raw = _raw_command(_session_conn, "pwr 99")
+        assert PylontechParser.parse_pwr_indexed(raw, 99) is None
+
+
+# ===========================================================================
+# parse_number — decimal/hex event value helper
+# ===========================================================================
+class TestParseNumber:
+    def test_parses_decimal(self):
+        assert PylontechParser.parse_number("42") == 42
+
+    def test_parses_hex(self):
+        assert PylontechParser.parse_number("0x10") == 16
+
+    def test_parses_uppercase_hex_prefix(self):
+        assert PylontechParser.parse_number("0X1F") == 31
+
+    def test_dash_placeholder_returns_none(self):
+        assert PylontechParser.parse_number("-") is None
+
+    def test_empty_returns_none(self):
+        assert PylontechParser.parse_number("") is None
+
+    def test_garbage_returns_none(self):
+        assert PylontechParser.parse_number("nope") is None
+
+
+# ===========================================================================
 # parse_info — device information
 # ===========================================================================
 class TestParseInfo:
@@ -815,6 +893,32 @@ class TestParseBat:
         assert len(bat.cells) == 1
         assert bat.cells[0].cell_id == 1
         assert any("Error parsing bat line" in r.message for r in caplog.records)
+
+    def test_missing_soc_header_shifts_capacity_index(self):
+        """Some Pytes/Pylontech firmware omits the "SOC" header label even
+        though each data row still carries a percentage token immediately
+        before the Coulomb (mAh) value. Without shifting cap_idx to account
+        for the missing header token, int(parts[cap_idx]) reads "67%" and
+        raises ValueError, silently dropping the row.
+        """
+        from pylontech_parser import PylontechParser
+        from structs import PylontechBattery
+
+        raw = (
+            "bat 1\r\n@\r\r\n"
+            "Battery  Volt     Curr     Tempr    Base State   "
+            "Volt. State  Curr. State  Temp. State  Coulomb\r\r\n"
+            "0        3378     3806     17000    Charge       "
+            "Normal       Normal       Normal       67%      3333 mAH\r\r\n"
+            "Command completed successfully\r\npylon>"
+        )
+        bat = PylontechBattery(1, 0, 0, 0, 0, "", 0, 0.0)
+        PylontechParser.parse_bat(raw, bat)
+
+        assert len(bat.cells) == 1
+        cell = bat.cells[0]
+        assert cell.soc == 67
+        assert cell.capacity == 3333
 
     def test_all_absent_zeroes_system_metrics(self):
         """When every battery row is Absent, system voltage/current/soc/power

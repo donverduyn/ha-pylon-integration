@@ -19,6 +19,9 @@ All configuration is via environment variables:
 
   POLL_INTERVAL     : seconds between polls, default 15
   AUTO_SYNC_TIME    : "true" to sync BMS clock on startup, default "false"
+  CELL_POLLING      : "false" to skip per-battery "bat N" cell polling, default "true"
+  MAX_BATTERIES     : upper bound on "pwr N" probes when the aggregate "pwr"
+                      response is rejected, default 16
 """
 
 import json
@@ -84,6 +87,8 @@ MQTT_TLS = os.getenv("MQTT_TLS", "false").lower() == "true"
 
 POLL_INTERVAL = _int_env("POLL_INTERVAL", 15)
 AUTO_SYNC_TIME = os.getenv("AUTO_SYNC_TIME", "false").lower() == "true"
+CELL_POLLING = os.getenv("CELL_POLLING", "true").lower() == "true"
+MAX_BATTERIES = _int_env("MAX_BATTERIES", 16)
 
 # Path where the energy counters are persisted across container restarts.
 # Override with the ENERGY_STATE_FILE env var (set to "" to disable persistence).
@@ -98,6 +103,10 @@ AVAIL_TOPIC = f"{MQTT_TOPIC_PREFIX}/availability"
 
 
 PROMPT = b"pylon>"
+# Some Pytes/Pylontech firmware variants complete a command without ever
+# emitting the "pylon>" prompt. Accepting this alternate terminator too keeps
+# those consoles from timing out on every single command.
+_ALT_TERMINATOR = b"Command completed"
 _READ_TIMEOUT = 5.0  # overall deadline waiting for a complete response
 _POLL_INTERVAL = 0.1  # per-read timeout while polling for more data
 
@@ -105,12 +114,13 @@ _POLL_INTERVAL = 0.1  # per-read timeout while polling for more data
 class BmsConnection:
     """Manages a serial or TCP connection to the Pylontech BMS.
 
-    Every command's response ends with the console's "pylon>" prompt, so
-    reads poll in short bursts until that terminator appears (or a deadline
-    elapses) instead of sleeping a fixed duration and grabbing whatever
-    happens to be available — a fast response returns immediately, a slow
-    one gets the full deadline, and a response is never returned truncated
-    mid-stream.
+    Every command's response ends with the console's "pylon>" prompt (or, on
+    some firmware, a "Command completed" line with no prompt at all), so
+    reads poll in short bursts until one of those terminators appears (or a
+    deadline elapses) instead of sleeping a fixed duration and grabbing
+    whatever happens to be available — a fast response returns immediately, a
+    slow one gets the full deadline, and a response is never returned
+    truncated mid-stream.
     """
 
     def __init__(self) -> None:
@@ -150,14 +160,14 @@ class BmsConnection:
                 self._serial.open()
 
     def _read_until_prompt(self) -> bytes:
-        """Read chunks until the "pylon>" prompt appears.
+        """Read chunks until the "pylon>" prompt (or "Command completed") appears.
 
         Raises ConnectionError if the remote/serial side goes away, or
-        TimeoutError if _READ_TIMEOUT elapses, before the prompt is seen.
-        A response is either complete or an exception — it must never come
-        back as a partial fragment silently mistaken for a full one further
-        up the call chain (see send_command's callers, which check for
-        expected substrings rather than a definitive terminator).
+        TimeoutError if _READ_TIMEOUT elapses, before either terminator is
+        seen. A response is either complete or an exception — it must never
+        come back as a partial fragment silently mistaken for a full one
+        further up the call chain (see send_command's callers, which check
+        for expected substrings rather than a definitive terminator).
         """
         deadline = time.monotonic() + _READ_TIMEOUT
         data = b""
@@ -179,11 +189,12 @@ class BmsConnection:
                 if not chunk:
                     continue
             data += chunk
-            if PROMPT in data:
+            if PROMPT in data or _ALT_TERMINATOR in data:
                 return data
         raise TimeoutError(
             f"Timed out after {_READ_TIMEOUT}s waiting for the "
-            f"{PROMPT.decode()!r} prompt ({len(data)} bytes received)"
+            f"{PROMPT.decode()!r} prompt or {_ALT_TERMINATOR.decode()!r} "
+            f"({len(data)} bytes received)"
         )
 
     def send_command(self, cmd: str) -> str:
@@ -351,6 +362,37 @@ class EnergyTracker:
 # ---------------------------------------------------------------------------
 
 
+def _fetch_batteries_indexed(bms: "BmsConnection", system: PylontechSystem) -> None:
+    """Populate *system* by probing 'pwr N' for each slot, up to MAX_BATTERIES.
+
+    Fallback battery-discovery path for firmware whose aggregate 'pwr'
+    response doesn't match the expected tabular format. Probing stops at the
+    first "not found" (the slot index exceeds the BMS's own slot count) or
+    at MAX_BATTERIES, whichever comes first; absent slots in between are
+    skipped rather than treated as the end of the stack.
+    """
+    batteries = []
+    for bat_id in range(1, MAX_BATTERIES + 1):
+        raw = bms.send_command(f"pwr {bat_id}")
+        if "not found" in raw:
+            break
+        bat = PylontechParser.parse_pwr_indexed(raw, bat_id)
+        if bat is not None:
+            batteries.append(bat)
+
+    system.batteries = batteries
+    if batteries:
+        system.voltage = round(sum(b.voltage for b in batteries) / len(batteries), 2)
+        system.current = round(sum(b.current for b in batteries), 2)
+        system.soc = round(sum(b.soc for b in batteries) / len(batteries), 1)
+        system.power = round(sum(b.power for b in batteries), 1)
+    else:
+        system.voltage = 0.0
+        system.current = 0.0
+        system.soc = 0.0
+        system.power = 0.0
+
+
 def _build_mqtt_client() -> mqtt.Client:
     """Construct the sidecar's paho client with auth, TLS, and LWT applied."""
     client = mqtt.Client(CallbackAPIVersion.VERSION2)
@@ -490,27 +532,42 @@ def main() -> None:
             if "Power Volt" not in raw_pwr:
                 time.sleep(1.0)
                 raw_pwr = bms.send_command("pwr")
-            if "Power Volt" not in raw_pwr:
-                raise IOError("Did not receive valid 'pwr' response")
-
-            raw_stat = bms.send_command("stat")
-            raw_time = bms.send_command("time")
 
             if system is None:
                 system = PylontechSystem(0, 0, 0, 0, 0.0, 0.0, 0.0)
 
-            PylontechParser.parse_pwr(raw_pwr, system)
-
-            for bat in system.batteries:
-                try:
-                    raw_bat = bms.send_command(f"bat {bat.sys_id}")
-                    PylontechParser.parse_bat(raw_bat, bat)
-                except Exception as bat_err:
-                    _LOGGER.warning(
-                        "Could not fetch cell data for battery %d: %s",
-                        bat.sys_id,
-                        bat_err,
+            if "Power Volt" in raw_pwr:
+                PylontechParser.parse_pwr(raw_pwr, system)
+            else:
+                # Some Pytes/Pylontech firmware either doesn't implement the
+                # aggregate table or formats its columns differently. Fall
+                # back to probing each battery individually via "pwr N",
+                # which uses a completely different (vertical) response
+                # format — see PylontechParser.parse_pwr_indexed.
+                _LOGGER.warning(
+                    "Aggregate 'pwr' response missing expected header — "
+                    "falling back to per-battery 'pwr N' polling"
+                )
+                _fetch_batteries_indexed(bms, system)
+                if not system.batteries:
+                    raise IOError(
+                        "Did not receive valid 'pwr' response (aggregate or indexed)"
                     )
+
+            raw_stat = bms.send_command("stat")
+            raw_time = bms.send_command("time")
+
+            if CELL_POLLING:
+                for bat in system.batteries:
+                    try:
+                        raw_bat = bms.send_command(f"bat {bat.sys_id}")
+                        PylontechParser.parse_bat(raw_bat, bat)
+                    except Exception as bat_err:
+                        _LOGGER.warning(
+                            "Could not fetch cell data for battery %d: %s",
+                            bat.sys_id,
+                            bat_err,
+                        )
 
             PylontechParser.parse_stat(raw_stat, system)
             PylontechParser.parse_time(raw_time, system)

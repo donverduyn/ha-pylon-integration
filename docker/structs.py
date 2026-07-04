@@ -37,6 +37,13 @@ class PylontechBattery:
     batt_volt_status: str | None = None  # B.V.St – battery-level voltage state
     batt_temp_status: str | None = None  # B.T.St – battery-level temperature state
 
+    # Fields only available from the vertical 'pwr N' block (None when the
+    # battery was discovered via the tabular 'pwr' response instead)
+    coul_status: str | None = None  # Coul. Status
+    bat_events: int | None = None  # Bat Events bitmask (decimal or 0x-hex in the console)
+    power_events: int | None = None  # Power Events bitmask
+    sys_fault: int | None = None  # System Fault bitmask
+
     cells: list[PylontechCell] = field(default_factory=list)
 
 

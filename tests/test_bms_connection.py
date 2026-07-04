@@ -117,3 +117,21 @@ class TestReadUntilPromptTruncation:
         finally:
             server.close()
             client.close()
+
+    def test_response_with_only_alt_terminator_returns_without_prompt(
+        self, monkeypatch
+    ) -> None:
+        """Some Pytes/Pylontech firmware completes a command without ever
+        emitting the "pylon>" prompt. That must still return promptly
+        instead of timing out after _READ_TIMEOUT."""
+        conn = self._connection(monkeypatch, read_timeout=2.0)
+        server, client = socket.socketpair()
+        conn._tcp = client
+        try:
+            server.sendall(b"Voltage : 51200\r\nCommand completed\r\n")
+            data = conn._read_until_prompt()
+            assert b"Command completed" in data
+            assert b"pylon>" not in data
+        finally:
+            server.close()
+            client.close()

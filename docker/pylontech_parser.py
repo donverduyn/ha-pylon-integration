@@ -199,6 +199,78 @@ class PylontechParser:
         return current_system
 
     @staticmethod
+    def parse_number(value: str) -> int | None:
+        """Parses a decimal or '0x'-prefixed hex integer as reported by the
+        console for event/fault bitmasks (e.g. "0x1", "4", "-"). Returns None
+        for empty/placeholder input or anything that doesn't parse cleanly.
+        """
+        value = value.strip()
+        if not value or value == "-":
+            return None
+        try:
+            return int(value, 16) if value.lower().startswith("0x") else int(value)
+        except ValueError:
+            _LOGGER.warning("Could not parse numeric event value: %r", value)
+            return None
+
+    @staticmethod
+    def parse_pwr_indexed(raw_text: str, bat_id: int) -> "PylontechBattery | None":
+        """Parses the vertical key:value block returned by 'pwr N'.
+
+        Some Pytes/Pylontech firmware either omits the tabular 'pwr' response
+        or formats its aggregate columns differently, so the per-battery
+        'pwr N' block is used as a fallback source for battery discovery.
+        Returns None when the slot is out of range ("not found") or the
+        battery is absent — callers should treat that as "no battery here",
+        not an error.
+        """
+        if "not found" in raw_text:
+            return None
+
+        fields: dict[str, str] = {}
+        for line in raw_text.splitlines():
+            if ":" not in line:
+                continue
+            key, _, rest = line.partition(":")
+            key = key.strip()
+            tokens = rest.split()
+            if not key or not tokens:
+                continue
+            fields[key] = tokens[0]
+
+        if not fields or fields.get("Basic Status", "").lower() == "absent":
+            return None
+
+        try:
+            voltage = int(fields["Voltage"]) / 1000.0
+            current = int(fields["Current"]) / 1000.0
+            temperature = int(fields["Temperature"]) / 1000.0
+            soc = int(fields["Coulomb"].replace("%", ""))
+        except (KeyError, ValueError) as error:
+            _LOGGER.error(
+                "Error parsing 'pwr %d' indexed block: %s", bat_id, error
+            )
+            return None
+
+        return PylontechBattery(
+            sys_id=bat_id,
+            voltage=voltage,
+            current=current,
+            temperature=temperature,
+            soc=soc,
+            status=fields.get("Basic Status", ""),
+            power=round(voltage * current, 2),
+            energy_stored=0.0,
+            volt_status=fields.get("Volt Status"),
+            curr_status=fields.get("Current Status"),
+            temp_status=fields.get("Tmpr. Status"),
+            coul_status=fields.get("Coul. Status"),
+            bat_events=PylontechParser.parse_number(fields.get("Bat Events", "")),
+            power_events=PylontechParser.parse_number(fields.get("Power Events", "")),
+            sys_fault=PylontechParser.parse_number(fields.get("System Fault", "")),
+        )
+
+    @staticmethod
     def parse_info(raw_text: str, system: PylontechSystem) -> PylontechSystem:
         """Parses 'info' command output."""
         lines = raw_text.splitlines()
@@ -340,6 +412,7 @@ class PylontechParser:
             if parts[0] == "Battery" and "Coulomb" in parts:
                 hdr_i = 0  # header token position
                 data_i = 0  # corresponding data-row column index
+                soc_seen = False
                 while hdr_i < len(parts):
                     tok = parts[hdr_i]
                     if hdr_i + 1 < len(parts) and parts[hdr_i + 1].lower() == "state":
@@ -362,10 +435,22 @@ class PylontechParser:
                             temp_idx = data_i
                         elif tok == "SOC":
                             soc_idx = data_i
+                            soc_seen = True
                         elif tok == "Coulomb":
                             cap_idx = data_i
                         hdr_i += 1
                     data_i += 1
+                if not soc_seen:
+                    # Some Pytes/Pylontech firmware omits the "SOC" header
+                    # label even though each data row still carries a
+                    # percentage token (e.g. "67%") immediately before the
+                    # Coulomb (mAh) value. That token landed at whatever
+                    # column the (now wrong) header-driven cap_idx computed,
+                    # one short of Coulomb's real position — without this,
+                    # int(parts[cap_idx]) reads that "67%" token and raises
+                    # ValueError on the "%", dropping the whole row.
+                    soc_idx = cap_idx
+                    cap_idx = cap_idx + 1
                 _LOGGER.debug(
                     "bat header detected — volt=%d curr=%d temp=%d "
                     "base=%d volt_st=%d curr_st=%d temp_st=%d soc=%d cap=%d",
