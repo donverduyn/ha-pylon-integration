@@ -34,13 +34,13 @@ jobs:
             lockfile: requirements_dev_min.lock.txt
     steps:
       - uses: "actions/checkout@v4"
-      - uses: "actions/setup-python@v6"
+      - uses: "astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39" # v8.2.0
         with:
           python-version: "3.13"
-          cache: "pip"
-          cache-dependency-path: ${{ matrix.lockfile }}
+          activate-environment: true
+          cache-dependency-glob: ${{ matrix.lockfile }}
       - name: Install dependencies (HA ${{ matrix.ha-version }})
-        run: pip install --require-hashes -r ${{ matrix.lockfile }}
+        run: uv pip install --require-hashes -r ${{ matrix.lockfile }}
       - name: Install Mosquitto (for the e2e tests)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mosquitto
       - name: Run test suite
@@ -52,13 +52,13 @@ jobs:
     runs-on: "ubuntu-latest"
     steps:
       - uses: "actions/checkout@v4"
-      - uses: "actions/setup-python@v6"
+      - uses: "astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39" # v8.2.0
         with:
           python-version: "3.13"
-          cache: "pip"
-          cache-dependency-path: requirements_dev.lock.txt
+          activate-environment: true
+          cache-dependency-glob: requirements_dev.lock.txt
       - name: Install dependencies
-        run: pip install --require-hashes -r requirements_dev.lock.txt
+        run: uv pip install --require-hashes -r requirements_dev.lock.txt
       - name: Ruff
         run: ruff check .
       - name: Pyright
