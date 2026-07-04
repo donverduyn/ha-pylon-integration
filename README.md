@@ -130,14 +130,14 @@ The sidecar publishes:
 | `MQTT_TOPIC_PREFIX` | `pylontech/stack` | Base topic; `/state` and `/availability` are appended |
 | `POLL_INTERVAL` | `15` | Seconds between BMS polls; max `150` — the HA integration marks the device unavailable after 300s without a message, so anything higher will flap availability |
 | `AUTO_SYNC_TIME` | `false` | Sync BMS clock to system time on startup |
-| `MONITORING_LEVEL` | `high` | `low`, `medium`, or `high` — how much detail to walk per battery on top of the aggregate `pwr` table. `low`: aggregate `pwr` only. `medium`: adds one `pwr N` round trip per battery for event/fault status the aggregate table doesn't expose. `high`: adds per-battery `bat N` cell polling on top of `medium`. Lower levels mean fewer round trips per poll — useful on larger stacks. |
+| `MONITORING_LEVEL` | `medium` | `low`, `medium`, or `high` — how much detail to walk per battery on top of the aggregate `pwr` table. `low`: aggregate `pwr` only. `medium`: adds one `pwr N` round trip per battery for event/fault status the aggregate table doesn't expose. `high`: adds per-battery `bat N` cell polling on top of `medium`, which creates a further 9 HA entities *per cell* — opt into `high` deliberately, since on a large stack (e.g. 16 modules × 15 cells) that's 2,000+ additional entities. Lower levels also mean fewer round trips per poll — useful on larger stacks. |
 | `MAX_BATTERIES` | `16` | Upper bound on `pwr N` probes when the aggregate `pwr` response doesn't look valid (some firmware only exposes per-battery data this way) |
 | `ENERGY_STATE_FILE` | `/data/energy_state.json` | Where cumulative energy_in/energy_out are persisted; set to `""` to disable. Requires the `/data` volume mount shown above to survive container recreation. |
 
 ### Step 2 — Install the HA integration
 
 > [!NOTE]
-> Requires **Home Assistant 2024.11 or newer** (needed for the config entry reconfigure flow used by Step 3's Reconfigure option).
+> Requires **Home Assistant 2025.3 or newer** — HA's own built-in `mqtt` component pins `paho-mqtt==1.6.1` on every release before 2025.3.0, which conflicts with this integration's `paho-mqtt>=2.0.0` requirement (needed for the `paho.mqtt.enums` module). It also needs the config entry reconfigure flow used by Step 3's Reconfigure option, available since 2024.11.
 
 #### Via HACS (Recommended)
 

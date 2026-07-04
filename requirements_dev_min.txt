@@ -1,0 +1,31 @@
+# Same dev toolchain as requirements_dev.txt, pinned to the minimum Home
+# Assistant version this integration declares support for (hacs.json /
+# manifest.json: "homeassistant": "2025.4.0") instead of whatever is
+# current. Compiled separately (requirements_dev_min.lock.txt) so CI can run
+# the test suite against both ends of the supported range — see
+# .github/workflows/tests.yaml's `ha-version` matrix.
+#
+# Why 2025.4.0, not 2024.11 (hacs.json's original floor) or 2025.3.0 (the
+# first fix attempt):
+#   - HA's own built-in mqtt component pins paho-mqtt==1.6.1 on every release
+#     before 2025.3.0 — predates the paho.mqtt.enums module coordinator.py
+#     imports, conflicting with this integration's paho-mqtt>=2.0.0
+#     requirement. HA core didn't bump to paho-mqtt 2.x until 2025.3.0.
+#   - The entire 2025.3.x branch, in turn, pins aiohttp==3.11.13 in its own
+#     PyPI metadata — a release since yanked from PyPI for a regression, so
+#     no resolver can install homeassistant==2025.3.* from scratch anymore
+#     (see https://github.com/aio-libs/aiohttp/issues/10617). 2025.4.0 is
+#     the first release with neither problem.
+pyserial>=3.5
+
+# Pinned to the release that depends on homeassistant==2025.4.0 exactly —
+# this project's declared minimum. Bump only in lockstep with a deliberate
+# minimum-version bump in hacs.json/manifest.json.
+pytest-homeassistant-custom-component==0.13.232
+
+# Code quality
+ruff
+pyright
+
+# Vulnerability scanning
+pip-audit

@@ -1,0 +1,54 @@
+name: Release
+
+# Triggered by pushing a tag like v2.0.0 or v2.0.0-rc1. Builds the sidecar
+# image with the tag baked in as SIDECAR_VERSION and the triggering commit as
+# GIT_SHA (see docker/Dockerfile's ARGs and docker/main.py's diagnostics
+# fields), pushes it to GHCR under that version, and publishes a matching
+# GitHub Release — this is what lets a user pair a specific HACS release
+# with a specific, reproducible sidecar image instead of both floating on an
+# unversioned "2.0.0" that every commit shares.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: "ubuntu-latest"
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: "actions/checkout@v4"
+
+      - name: Derive version from tag
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - uses: "docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0" # v4.4.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: "docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a" # v7.3.0
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            SIDECAR_VERSION=${{ steps.version.outputs.version }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ steps.version.outputs.version }}
+            ghcr.io/${{ github.repository }}:latest
+
+      - uses: "softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b" # v3.0.1
+        with:
+          generate_release_notes: true
+          # Anything with a hyphen (e.g. v2.0.0-rc1) is a pre-release —
+          # real-hardware validation gaps mean nothing ships as a final
+          # release until that's been done (see CONTRIBUTING.md).
+          prerelease: ${{ contains(github.ref_name, '-') }}

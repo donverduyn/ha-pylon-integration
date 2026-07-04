@@ -392,3 +392,100 @@ class TestRegistryIdentityMigration:
         migrated = ent_reg.async_get(old_entity_id)
         assert migrated is not None
         assert migrated.unique_id == f"{new_stack_id}_voltage"
+
+
+class TestLargeStackScale:
+    """A 16-module stack with per-cell (MONITORING_LEVEL=high) detail is the
+    largest configuration the sidecar documents (see docker/main.py's
+    MAX_BATTERIES default). Cell entity creation is driven purely by what
+    shows up in the payload, independent of the sidecar's own
+    MONITORING_LEVEL default, so this exercises the entity-registry/platform
+    setup path at that worst-case size instead of assuming it scales cleanly
+    from the single-battery/single-cell fixtures used elsewhere.
+    """
+
+    _MODULES = 16
+    _CELLS_PER_MODULE = 15
+
+    @staticmethod
+    def _large_payload() -> dict[str, Any]:
+        return {
+            "schema_version": 1,
+            "voltage": 51.2,
+            "current": 10.0,
+            "soc": 80.0,
+            "power": 512.0,
+            "energy_in": 10.5,
+            "energy_out": 5.2,
+            "spec": "48V/100AH",
+            "manufacturer": "Pylon",
+            "model": "US5KBPL",
+            "batteries": [
+                {
+                    "sys_id": bat_id,
+                    "voltage": 51.2,
+                    "current": 10.0,
+                    "temperature": 25.0,
+                    "soc": 80,
+                    "status": "Charge",
+                    "power": 512.0,
+                    "cells": [
+                        {
+                            "cell_id": cell_id,
+                            "voltage": 3.4,
+                            "current": 0.5,
+                            "temperature": 25.0,
+                            "base_state": "Charge",
+                            "soc": 80,
+                        }
+                        for cell_id in range(TestLargeStackScale._CELLS_PER_MODULE)
+                    ],
+                }
+                for bat_id in range(1, TestLargeStackScale._MODULES + 1)
+            ],
+        }
+
+    async def test_entity_count_matches_expected_total(
+        self, hass: HomeAssistant
+    ) -> None:
+        from custom_components.pylontech_mqtt.sensor import (
+            BATTERY_SENSORS,
+            CELL_SENSORS,
+            SYSTEM_SENSORS,
+        )
+
+        entry, coordinator = await _create_entry(hass)
+        coordinator._process_payload(self._large_payload())
+        await hass.async_block_till_done()
+
+        # +1 per module: the battery capacity `number` entity (number.py),
+        # a separate platform from the sensor ones above but still tied to
+        # this config entry.
+        expected = (
+            len(SYSTEM_SENSORS)
+            + self._MODULES * (len(BATTERY_SENSORS) + 1)
+            + self._MODULES * self._CELLS_PER_MODULE * len(CELL_SENSORS)
+        )
+
+        ent_reg = er.async_get(hass)
+        actual = len(er.async_entries_for_config_entry(ent_reg, entry.entry_id))
+        assert actual == expected
+
+    async def test_every_cell_gets_its_own_registered_entity(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Spot-check the far corner of the stack (last module, last cell)
+        rather than only the aggregate count, in case some cells silently
+        collide on the same unique_id."""
+        entry, coordinator = await _create_entry(hass)
+        coordinator._process_payload(self._large_payload())
+        await hass.async_block_till_done()
+
+        ent_reg = er.async_get(hass)
+        entity_id = ent_reg.async_get_entity_id(
+            "sensor",
+            DOMAIN,
+            f"{_STACK_ID}_bat{self._MODULES}_cell{self._CELLS_PER_MODULE - 1}_voltage",
+        )
+        assert entity_id is not None
+        assert hass.states.get(entity_id) is not None

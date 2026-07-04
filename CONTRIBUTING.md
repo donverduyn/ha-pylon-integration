@@ -38,6 +38,17 @@ We welcome translations to make this integration accessible to everyone!
    }
    ```
 
+## Contributing a real-hardware transcript
+
+The test suite's BMS stub (`scripts/pylon_stub.py`) is hand-authored from
+the documented protocol — it has never been checked against what a real
+US2000/3000/5000 or Pytes-branded unit actually sends. If you have real
+hardware, running `python scripts/capture_transcript.py` against it and
+opening a PR with the result (see `tests/fixtures/transcripts/README.md`)
+is one of the most valuable things you can contribute; parser changes are
+currently only ever validated against our own understanding of the
+protocol.
+
 ## Submitting a Pull Request
 
 1. Create a Pull Request with your changes.
