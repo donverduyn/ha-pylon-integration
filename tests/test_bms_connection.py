@@ -82,6 +82,7 @@ class TestReadUntilPromptTruncation:
         monkeypatch.setattr(main, "_READ_TIMEOUT", read_timeout)
         return main.BmsConnection()
 
+    @pytest.mark.e2e
     def test_timeout_before_prompt_raises(self, monkeypatch) -> None:
         conn = self._connection(monkeypatch)
         server, client = socket.socketpair()
@@ -119,6 +120,7 @@ class TestReadUntilPromptTruncation:
             server.close()
             client.close()
 
+    @pytest.mark.e2e
     def test_response_with_only_alt_terminator_returns_without_prompt(
         self, monkeypatch
     ) -> None:
@@ -126,6 +128,7 @@ class TestReadUntilPromptTruncation:
         emitting the "pylon>" prompt. That must still return promptly
         instead of timing out after _READ_TIMEOUT."""
         conn = self._connection(monkeypatch, read_timeout=2.0)
+        monkeypatch.setattr(main, "_ALT_TERMINATOR_GRACE", 0.05)
         server, client = socket.socketpair()
         conn._tcp = client
         try:
@@ -137,6 +140,7 @@ class TestReadUntilPromptTruncation:
             server.close()
             client.close()
 
+    @pytest.mark.e2e
     def test_prompt_later_than_grace_window_does_not_leak_into_next_read(
         self, monkeypatch
     ) -> None:
@@ -168,6 +172,7 @@ class TestReadUntilPromptTruncation:
             server.close()
             client.close()
 
+    @pytest.mark.e2e
     def test_late_prompt_within_grace_window_is_absorbed(self, monkeypatch) -> None:
         """A 'pylon>' that arrives in a separate read shortly after 'Command
         completed' must still be captured here — not left to leak into the
@@ -206,6 +211,7 @@ class TestSendCommandRetryAndFlush:
         monkeypatch.setattr(main, "_COMMAND_RETRIES", retries)
         return main.BmsConnection()
 
+    @pytest.mark.e2e
     def test_retries_after_a_stall_then_succeeds(self, monkeypatch) -> None:
         conn = self._connection(monkeypatch, read_timeout=0.3, retries=2)
         server, client = socket.socketpair()
@@ -227,6 +233,7 @@ class TestSendCommandRetryAndFlush:
             server.close()
             client.close()
 
+    @pytest.mark.e2e
     def test_gives_up_after_exhausting_retries(self, monkeypatch) -> None:
         conn = self._connection(monkeypatch, read_timeout=0.2, retries=1)
         server, client = socket.socketpair()

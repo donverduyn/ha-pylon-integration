@@ -17,11 +17,11 @@ jobs:
           python-version: "3.13"
       - name: Install dependencies
         run: pip install --require-hashes -r requirements_dev.lock.txt
-      - name: Install Mosquitto (for the sidecar end-to-end tests)
+      - name: Install Mosquitto (for the e2e tests)
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mosquitto
       - name: Run test suite
         run: pytest
-      - name: Run sidecar end-to-end tests
+      - name: Run e2e tests (real subprocesses, real timeouts/retries)
         run: pytest -m e2e
       - name: Ruff
         run: ruff check .
