@@ -40,7 +40,7 @@ import sys
 import time
 from dataclasses import asdict
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Protocol
 
 import paho.mqtt.client as mqtt
 import serial
@@ -109,6 +109,16 @@ ENERGY_STATE_FILE = os.getenv("ENERGY_STATE_FILE", "/data/energy_state.json")
 
 STATE_TOPIC = f"{MQTT_TOPIC_PREFIX}/state"
 AVAIL_TOPIC = f"{MQTT_TOPIC_PREFIX}/availability"
+
+# Bumped whenever the state payload's shape changes in a way the HA
+# integration needs to know about. The integration (coordinator.py's
+# _SCHEMA_VERSION) rejects any payload whose schema_version doesn't match,
+# rather than guessing at partial compatibility between mismatched
+# sidecar/integration releases installed independently via Docker vs HACS.
+SCHEMA_VERSION = 1
+# Informational only (not compatibility-checked) — surfaced in HA diagnostics
+# so a bug report shows which sidecar build produced the data.
+SIDECAR_VERSION = "2.0.0"
 
 # ---------------------------------------------------------------------------
 # BMS connection
@@ -476,7 +486,18 @@ class EnergyTracker:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_batteries_indexed(bms: "BmsConnection", system: PylontechSystem) -> None:
+class _CommandSender(Protocol):
+    """The one BmsConnection method these helpers actually need.
+
+    Structural rather than a concrete BmsConnection type so tests can pass a
+    plain send_command(cmd) -> str fake without opening a real serial/TCP
+    connection.
+    """
+
+    def send_command(self, cmd: str) -> str: ...
+
+
+def _fetch_batteries_indexed(bms: _CommandSender, system: PylontechSystem) -> None:
     """Populate *system* by probing 'pwr N' for each slot, up to MAX_BATTERIES.
 
     Fallback battery-discovery path for firmware whose aggregate 'pwr'
@@ -507,7 +528,7 @@ def _fetch_batteries_indexed(bms: "BmsConnection", system: PylontechSystem) -> N
         system.power = 0.0
 
 
-def _enrich_batteries_indexed(bms: "BmsConnection", system: PylontechSystem) -> None:
+def _enrich_batteries_indexed(bms: _CommandSender, system: PylontechSystem) -> None:
     """Add per-battery detail only the vertical 'pwr N' block exposes
     (coul_status, bat_events, power_events, sys_fault) on top of batteries
     already populated from the aggregate 'pwr' table.
@@ -545,7 +566,17 @@ def _build_mqtt_client() -> mqtt.Client:
     return client
 
 
-def _publish_succeeded(*infos: "mqtt.MQTTMessageInfo") -> bool:
+class _PublishResult(Protocol):
+    """The one MQTTMessageInfo attribute _publish_succeeded needs.
+
+    Structural rather than the concrete paho type so tests can pass a plain
+    object exposing just .rc instead of a real MQTTMessageInfo.
+    """
+
+    rc: MQTTErrorCode
+
+
+def _publish_succeeded(*infos: _PublishResult) -> bool:
     """Return whether every publish() call in *infos* was actually sent.
 
     publish() returns MQTT_ERR_NO_CONN (it does not raise) when the client
@@ -753,7 +784,10 @@ def main() -> None:
             system.energy_in = round(energy.energy_in, 3)
             system.energy_out = round(energy.energy_out, 3)
 
-            payload = json.dumps(asdict(system), default=str)
+            payload_dict = asdict(system)
+            payload_dict["schema_version"] = SCHEMA_VERSION
+            payload_dict["sidecar_version"] = SIDECAR_VERSION
+            payload = json.dumps(payload_dict, default=str)
             state_info = client.publish(STATE_TOPIC, payload, retain=True)
             avail_info = client.publish(AVAIL_TOPIC, "online", retain=True)
             if not _publish_succeeded(state_info, avail_info):

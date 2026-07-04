@@ -11,7 +11,12 @@
     "ghcr.io/devcontainers-extra/features/uv:1": {},
     "ghcr.io/devcontainers/features/node:2": {},
     "ghcr.io/devcontainers/features/copilot-cli:1": {},
-    "ghcr.io/aqua/devcontainer-antigravity-cli/antigravity-cli:1": {}
+    "ghcr.io/aqua/devcontainer-antigravity-cli/antigravity-cli:1": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+			"version": "latest",
+			"enableNonRootDocker": "true",
+			"moby": "true"
+		}
   },
   "containerEnv": {
     "VIRTUAL_ENV": "/home/vscode/.venv"
@@ -38,10 +43,10 @@
       ],
       "settings": {
         "python.defaultInterpreterPath": "/home/vscode/.venv/bin/python",
-        "python.analysis.typeCheckingMode": "basic",
-        "python.analysis.extraPaths": [
-          "${workspaceFolder}/custom_components"
-        ],
+        // typeCheckingMode/extraPaths/etc. now live in [tool.pyright] in
+        // pyproject.toml (which Pylance reads directly and takes precedence
+        // over these settings) so there's one source of truth instead of two
+        // partially-overlapping configs.
         "editor.formatOnSave": true,
         "[python]": {
           "editor.defaultFormatter": "charliermarsh.ruff",

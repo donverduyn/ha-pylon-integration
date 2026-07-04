@@ -185,22 +185,26 @@ class TestParsePwrIndexed:
     def test_voltage_current_temperature_scaled_from_milli(self, _session_conn):
         raw = _raw_command(_session_conn, "pwr 1")
         bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat is not None
         assert bat.voltage > 0
         assert bat.temperature > 0
 
     def test_soc_matches_stub_start(self, _session_conn):
         raw = _raw_command(_session_conn, "pwr 1")
         bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat is not None
         assert bat.soc == STUB_SOC_START
 
     def test_power_is_voltage_times_current(self, _session_conn):
         raw = _raw_command(_session_conn, "pwr 1")
         bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat is not None
         assert bat.power == pytest.approx(bat.voltage * bat.current, rel=1e-3)
 
     def test_status_fields_populated(self, _session_conn):
         raw = _raw_command(_session_conn, "pwr 1")
         bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat is not None
         assert bat.status
         assert bat.volt_status == "Normal"
         assert bat.curr_status == "Normal"
@@ -212,6 +216,7 @@ class TestParsePwrIndexed:
         must come back as ints via parse_number, not raw strings."""
         raw = _raw_command(_session_conn, "pwr 1")
         bat = PylontechParser.parse_pwr_indexed(raw, 1)
+        assert bat is not None
         assert bat.bat_events == 0
         assert bat.power_events == 0
         assert bat.sys_fault == 0

@@ -12,6 +12,7 @@ from custom_components.pylontech_mqtt.diagnostics import (
 )
 
 _PAYLOAD: dict = {
+    "schema_version": 1,
     "voltage": 51.2,
     "current": 10.0,
     "soc": 80.0,

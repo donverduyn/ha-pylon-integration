@@ -17,9 +17,18 @@ jobs:
           python-version: "3.13"
       - name: Install dependencies
         run: pip install --require-hashes -r requirements_dev.lock.txt
+      - name: Install Mosquitto (for the sidecar end-to-end tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mosquitto
       - name: Run test suite
         run: pytest
       - name: Ruff
         run: ruff check .
       - name: pip-audit (runtime dependencies)
         run: pip-audit -r requirements_runtime.txt
+
+  docker-build:
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: "actions/checkout@v4"
+      - name: Build the sidecar image
+        run: docker build -f docker/Dockerfile -t pylon2mqtt:ci .

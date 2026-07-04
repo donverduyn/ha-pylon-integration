@@ -32,6 +32,7 @@ _STACK_ID = stack_id_from_broker(
 )
 
 _PAYLOAD: dict[str, Any] = {
+    "schema_version": 1,
     "voltage": 51.2,
     "current": 10.0,
     "soc": 80.0,

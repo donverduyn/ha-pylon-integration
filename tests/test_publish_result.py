@@ -6,14 +6,19 @@ value before logging a reading as "Published" — otherwise a disconnected
 sidecar silently claims delivery for data that never left the process.
 """
 
-from types import SimpleNamespace
+from dataclasses import dataclass
 
 from main import _publish_succeeded
 from paho.mqtt.enums import MQTTErrorCode
 
 
-def _info(rc: MQTTErrorCode) -> SimpleNamespace:
-    return SimpleNamespace(rc=rc)
+@dataclass
+class _Info:
+    rc: MQTTErrorCode
+
+
+def _info(rc: MQTTErrorCode) -> _Info:
+    return _Info(rc=rc)
 
 
 def test_all_successful_returns_true() -> None:

@@ -17,6 +17,13 @@ from .const import DEFAULT_BATTERY_CAPACITY, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
+# Bumped in lockstep with the sidecar's own SCHEMA_VERSION (docker/main.py)
+# whenever the state payload's shape changes in a way this integration needs
+# to know about. The sidecar and integration are installed independently (one
+# via Docker, one via HACS), so there is no other way to detect a mismatched
+# pair before it silently produces broken sensors.
+_SCHEMA_VERSION = 1
+
 # Top-level fields every state payload must carry, and the range each is
 # allowed to fall in (None on either side means unbounded that direction).
 _REQUIRED_NUMERIC_FIELDS: dict[str, tuple[float | None, float | None]] = {
@@ -60,6 +67,14 @@ def _validate_state_payload(payload: dict) -> str | None:
     is accepted, so a bad message is dropped and the last-known-good reading
     is kept instead.
     """
+    schema_version = payload.get("schema_version")
+    if schema_version != _SCHEMA_VERSION:
+        return (
+            f"schema_version {schema_version!r} is not supported by this "
+            f"integration (expected {_SCHEMA_VERSION}) — update the sidecar "
+            "container and the HA integration to matching releases"
+        )
+
     for field, (low, high) in _REQUIRED_NUMERIC_FIELDS.items():
         if field not in payload:
             return f"missing required field {field!r}"
@@ -158,6 +173,14 @@ class PylontechCoordinator(DataUpdateCoordinator[dict]):
         self._client = client
         client.loop_start()
 
+        # Start the staleness clock now rather than leaving it unset until
+        # the first valid state message: a sidecar that connects and reports
+        # "online" but never manages to publish a single valid state payload
+        # (e.g. a schema_version mismatch) must still trip the watchdog after
+        # _STALE_TIMEOUT_SECONDS, instead of sitting "available" forever with
+        # no data because the clock never started.
+        self._last_message_monotonic = time.monotonic()
+
         # setup() runs on the event loop (see the caller in __init__.py), so
         # this can be registered directly.
         self._unsub_watchdog = async_track_time_interval(
@@ -204,12 +227,14 @@ class PylontechCoordinator(DataUpdateCoordinator[dict]):
         self.hass.loop.call_soon_threadsafe(self._mark_unavailable)
 
     def _on_message(self, client, userdata, msg):
-        # Any message at all — state or availability — proves the sidecar's
-        # poll loop is still alive and publishing; feeds the staleness
-        # watchdog below.
-        self._last_message_monotonic = time.monotonic()
-
         if msg.topic == self._avail_topic:
+            # Deliberately does NOT feed _last_message_monotonic: the sidecar
+            # republishes "online" on every poll cycle regardless of whether
+            # that cycle's state payload was valid, so treating it as a
+            # freshness signal would let a chronically incompatible or
+            # malformed publisher dodge the staleness watchdog forever while
+            # never actually delivering usable data. Only a successfully
+            # validated state payload (_process_payload) counts as freshness.
             if msg.payload.decode("utf-8", errors="replace") == "online":
                 # Mark available immediately — do not gate on data being present.
                 # The "online" availability message can arrive before the first
@@ -265,6 +290,7 @@ class PylontechCoordinator(DataUpdateCoordinator[dict]):
                         )
             self._compute_energy_stored(system)
             self.async_set_updated_data(system)
+            self._last_message_monotonic = time.monotonic()
         except Exception as err:
             _LOGGER.error("Error processing MQTT payload: %s", err, exc_info=True)
 

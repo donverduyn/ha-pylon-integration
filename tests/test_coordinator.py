@@ -32,6 +32,7 @@ _BAT1: dict = {
 }
 
 _PAYLOAD: dict = {
+    "schema_version": 1,
     "voltage": 51.2,
     "current": 10.0,
     "soc": 80.0,
@@ -456,14 +457,33 @@ class TestAvailability:
 
 
 class TestStalenessWatchdog:
-    async def test_any_message_updates_last_message_time(
+    async def test_availability_message_does_not_update_last_message_time(
         self, coordinator: PylontechCoordinator
     ) -> None:
+        """The sidecar republishes 'online' every poll cycle regardless of
+        whether that cycle's state payload was valid, so it must not feed the
+        staleness clock — otherwise a chronically incompatible/malformed
+        publisher would dodge the watchdog forever while never delivering
+        usable data (see coordinator._on_message)."""
         assert coordinator._last_message_monotonic is None
         coordinator._on_message(
             None, None, _msg("pylontech/stack/availability", "online")
         )
+        assert coordinator._last_message_monotonic is None
+
+    async def test_valid_state_message_updates_last_message_time(
+        self, hass: HomeAssistant, coordinator: PylontechCoordinator
+    ) -> None:
+        assert coordinator._last_message_monotonic is None
+        coordinator._process_payload(_PAYLOAD)
         assert coordinator._last_message_monotonic is not None
+
+    async def test_invalid_state_message_does_not_update_last_message_time(
+        self, coordinator: PylontechCoordinator
+    ) -> None:
+        assert coordinator._last_message_monotonic is None
+        coordinator._process_payload({})  # missing required fields
+        assert coordinator._last_message_monotonic is None
 
     async def test_stale_last_message_marks_unavailable(
         self, coordinator: PylontechCoordinator
@@ -662,6 +682,21 @@ class TestPayloadSchemaValidation:
         coordinator._process_payload({})  # malformed follow-up message
 
         assert coordinator.data["voltage"] == 51.2
+
+    async def test_missing_schema_version_is_rejected(
+        self, coordinator: PylontechCoordinator
+    ) -> None:
+        """A sidecar predating schema_version (or one that omits it) must be
+        treated as incompatible, not silently accepted."""
+        payload = {k: v for k, v in _PAYLOAD.items() if k != "schema_version"}
+        coordinator._process_payload(payload)
+        assert coordinator.data is None
+
+    async def test_mismatched_schema_version_is_rejected(
+        self, coordinator: PylontechCoordinator
+    ) -> None:
+        coordinator._process_payload({**_PAYLOAD, "schema_version": 999})
+        assert coordinator.data is None
 
     @pytest.mark.parametrize(
         "missing_field",

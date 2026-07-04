@@ -3,3 +3,26 @@ testpaths   = ["tests"]
 pythonpath  = ["tests", ".", "docker"]     # "." makes custom_components importable; "docker" exposes pylontech_parser and structs
 addopts     = "-v --tb=short --allow-hosts=127.0.0.1,localhost"
 asyncio_mode = "auto"
+
+[tool.pyright]
+include = ["custom_components", "docker", "scripts", "tests"]
+exclude = ["**/__pycache__", "**/.pytest_cache"]
+# Mirrors [tool.pytest.ini_options].pythonpath above: "docker" exposes
+# pylontech_parser/structs/main, "." makes custom_components importable,
+# matching how the test suite itself resolves these bare imports.
+extraPaths = ["docker", "tests", "."]
+# The devcontainer (.devcontainer/devcontainer.json) fixes VIRTUAL_ENV at
+# this path unconditionally, so it's reproducible for anyone using the
+# project's supported dev environment rather than a path specific to one run.
+venvPath = "/home/vscode"
+venv = ".venv"
+pythonVersion = "3.13"
+# Home Assistant's Entity declares device_info/available/native_value etc. as
+# cached_property for performance, but computing them live via a plain
+# @property in a subclass (as this integration and virtually every HA
+# integration, including core's own, does) is the correct and intended
+# pattern — caching them would silently freeze availability/state at first
+# access. Pyright's variance check has no way to know the override is safe,
+# so this specific rule is disabled rather than working around it 11+ times
+# with per-line ignores across entity.py/number.py/sensor.py.
+reportIncompatibleVariableOverride = false

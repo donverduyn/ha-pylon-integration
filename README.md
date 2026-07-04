@@ -51,12 +51,21 @@ The sidecar and HA are completely decoupled. You can run the sidecar on any mach
 
 The `docker/` directory contains the sidecar. All configuration is through environment variables — no editing of source files is needed.
 
-Copy `docker/docker-compose.yml` to your Docker host and adjust the variables:
+No pre-built image is published yet, so `docker-compose.yml`'s `build:` context needs the rest of the repo (`docker/pylontech_parser.py` and `docker/structs.py`) alongside it — copying just the compose file will not build. Clone the whole repository onto your Docker host instead:
+
+```bash
+git clone https://github.com/donverduyn/ha-pylontech-mqtt.git
+cd ha-pylontech-mqtt/docker
+```
+
+Then adjust the variables in `docker/docker-compose.yml`:
 
 ```yaml
 services:
   pylon2mqtt:
-    build: .          # or use an image if you publish one
+    build:
+      context: ..              # repo root — needed to copy parser.py & structs.py
+      dockerfile: docker/Dockerfile
     restart: unless-stopped
     environment:
       # --- Connection type: "serial" or "tcp" ---
@@ -94,10 +103,9 @@ volumes:
   energy_state:
 ```
 
-Build and start:
+Build and start (from the `docker/` directory):
 
 ```bash
-cd docker
 docker compose up -d --build
 ```
 
@@ -127,6 +135,9 @@ The sidecar publishes:
 | `ENERGY_STATE_FILE` | `/data/energy_state.json` | Where cumulative energy_in/energy_out are persisted; set to `""` to disable. Requires the `/data` volume mount shown above to survive container recreation. |
 
 ### Step 2 — Install the HA integration
+
+> [!NOTE]
+> Requires **Home Assistant 2024.11 or newer** (needed for the config entry reconfigure flow used by Step 3's Reconfigure option).
 
 #### Via HACS (Recommended)
 
@@ -193,7 +204,7 @@ Ensure the DIP switches are configured for the correct baud rate. For US2000/US3
 
 ## Upgrading from v1.x (direct serial/TCP)
 
-Version 1.0 replaced the original direct serial/TCP connection from HA with the MQTT sidecar model described above.
+Version 2.0 replaced the original direct serial/TCP connection from HA with the MQTT sidecar model described above. The sidecar and the HA integration are versioned and released together — install matching versions of both (see the sidecar's `sidecar_version` and the integration's `schema_version` compatibility check in Troubleshooting below).
 
 **Existing config entries cannot be migrated automatically.** After upgrading:
 
@@ -204,6 +215,7 @@ Version 1.0 replaced the original direct serial/TCP connection from HA with the 
 ## Troubleshooting
 
 - **Entities stay unavailable**: Check that the sidecar container is running (`docker compose logs -f pylon2mqtt`) and that `MQTT_TOPIC_PREFIX` matches in both the container and the HA integration.
+- **HA log shows "Rejecting malformed MQTT state payload — schema_version ... is not supported"**: The sidecar container and the HA integration were upgraded independently and are now on incompatible releases (the sidecar is built from source and the integration installs via HACS, so nothing keeps their versions in lockstep automatically). Rebuild the sidecar (`docker compose up -d --build`) from the same commit/tag as the installed integration version.
 - **Sidecar can't connect to BMS**: Verify the serial port path or TCP host/port. For serial mode, confirm the `devices:` mapping in the compose file includes the correct device node.
 - **Serial permissions (HA Core/Docker)**: Ensure the USB device is passed through to the sidecar container via the `devices:` key in `docker-compose.yml`. The container runs as a non-root user in the `dialout` group, which matches the default ownership/permissions Linux assigns to USB-serial adapters; if your host uses a different group for the device, add `group_add: ["<host-gid>"]` to `docker-compose.yml` (find the GID with `getent group dialout` on the host).
 - **`energy_state.json` stops persisting after upgrading**: Versions built from a Dockerfile predating the non-root sidecar user wrote `/data` as root. After upgrading, the new non-root user can't write to that existing volume (writes fail silently — a warning is logged, and energy counters just won't survive a restart). Fix it once with `docker compose exec -u root pylon2mqtt chown -R pylon2mqtt:pylon2mqtt /data` (or delete and let the sidecar recreate the volume, losing accumulated `energy_in`/`energy_out` — safe if you rely on the HA Energy dashboard's own long-term statistics, per the note above).
