@@ -10,7 +10,8 @@
     "ghcr.io/devcontainers-extra/features/opencode:1": {},
     "ghcr.io/devcontainers-extra/features/uv:1": {},
     "ghcr.io/devcontainers/features/node:2": {},
-    "ghcr.io/devcontainers/features/copilot-cli:1": {}
+    "ghcr.io/devcontainers/features/copilot-cli:1": {},
+    "ghcr.io/aqua/devcontainer-antigravity-cli/antigravity-cli:1": {}
   },
   "containerEnv": {
     "VIRTUAL_ENV": "/home/vscode/.venv"

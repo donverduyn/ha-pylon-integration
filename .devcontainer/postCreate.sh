@@ -6,8 +6,7 @@ set -e
 sudo apt-get update
 sudo apt-get install -y xdg-utils
 
-npm install -g @openai/codex
-npm install -g @kilocode/cli
+npm install -g @openai/codex @kilocode/cli
 
 # /usr/local's site-packages is root-owned, so deps can't install into the base image's
 # system Python as the vscode user. Use a uv-managed venv instead: uv is fast enough that
