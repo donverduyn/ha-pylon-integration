@@ -67,7 +67,7 @@ def _migrate_registry_identity(
         for device in list(
             dr.async_entries_for_config_entry(device_reg, entry.entry_id)
         ):
-            new_identifiers = set()
+            new_identifiers: set[tuple[str, str]] = set()
             changed = False
             for domain, ident in device.identifiers:
                 matched_prefix = next(
