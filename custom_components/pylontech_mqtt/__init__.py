@@ -1,7 +1,6 @@
 """The Pylontech MQTT integration."""
 
 import logging
-from typing import cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -85,13 +84,7 @@ def _migrate_registry_identity(
             if changed:
                 device_reg.async_update_device(device.id, new_identifiers=new_identifiers)
 
-        # entity_registry.async_get's return type is unresolvable to a partially
-        # unknown type in this HA version's own stubs (a gap upstream, not
-        # here); cast restores it to the real EntityRegistry class.
-        entity_reg = cast(
-            er.EntityRegistry,
-            er.async_get(hass),  # pyright: ignore[reportUnknownMemberType]
-        )
+        entity_reg = er.async_get(hass)
         for entity in list(
             er.async_entries_for_config_entry(entity_reg, entry.entry_id)
         ):
