@@ -49,6 +49,26 @@ pytestmark = [
 ]
 
 
+# Resolved once at collection time — before pytest_homeassistant_custom_
+# component's pytest_runtest_setup hook installs its per-test socket.
+# getaddrinfo patch, which now hard-blocks resolving *any* non-loopback/
+# non-IP hostname during a test (raising RuntimeError instead of the real
+# socket.gaierror a genuinely unresolvable name used to raise — the only
+# exception pytest-socket's own allow-host resolution catches). Resolving
+# host.docker.internal to a plain IP literal here, once, up front, sidesteps
+# that entirely: an IP literal always passes the patched check. On a plain
+# host (CI) where the name doesn't exist at all, this is just None and every
+# use below falls back to the loopback-only set, matching the old behavior.
+def _resolve_docker_internal_ip() -> str | None:
+    try:
+        return socket.gethostbyname("host.docker.internal")
+    except OSError:
+        return None
+
+
+_DOCKER_INTERNAL_IP: str | None = _resolve_docker_internal_ip()
+
+
 @pytest.fixture(autouse=True)
 def _allow_compose_stack_hosts() -> None:
     """Widen pytest-socket's connect allowlist for these tests.
@@ -58,14 +78,12 @@ def _allow_compose_stack_hosts() -> None:
     (any --allow-hosts in addopts is overridden), which blocks reaching the
     compose stack's published broker port at host.docker.internal under
     docker-outside-of-docker. Fixtures run after that hook, so re-widening
-    here wins; unresolvable names (host.docker.internal on CI/plain hosts)
-    are silently dropped by pytest-socket, and its own per-test teardown
-    removes the widened restriction again.
+    here wins.
     """
-    pytest_socket.socket_allow_hosts(
-        ["127.0.0.1", "localhost", "host.docker.internal"],
-        allow_unix_socket=True,
-    )
+    hosts = ["127.0.0.1", "localhost"]
+    if _DOCKER_INTERNAL_IP is not None:
+        hosts.append(_DOCKER_INTERNAL_IP)
+    pytest_socket.socket_allow_hosts(hosts, allow_unix_socket=True)
 
 
 _COMPOSE_FILE = Path(__file__).parent.parent / "docker" / "docker-compose.test.yml"
@@ -89,12 +107,17 @@ def _broker_host(port: int) -> str:
 
     On a plain host (CI) a published port binds on localhost. From inside a
     devcontainer using docker-outside-of-docker, the port is published on
-    the *host* VM instead — reachable as host.docker.internal — because the
-    compose stack runs as sibling containers on the host daemon, not
-    children of the devcontainer. Probing beats configuration: the same
+    the *host* VM instead — reachable via host.docker.internal's resolved IP
+    (see _DOCKER_INTERNAL_IP — the plain hostname string would trip HA's
+    test-time DNS lockdown here same as in _allow_compose_stack_hosts) —
+    because the compose stack runs as sibling containers on the host daemon,
+    not children of the devcontainer. Probing beats configuration: the same
     test file works in both places with no environment flag to forget.
     """
-    for host in ("127.0.0.1", "host.docker.internal"):
+    candidates = ["127.0.0.1"]
+    if _DOCKER_INTERNAL_IP is not None:
+        candidates.append(_DOCKER_INTERNAL_IP)
+    for host in candidates:
         try:
             with socket.create_connection((host, port), timeout=1.0):
                 return host
