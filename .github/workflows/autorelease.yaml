@@ -4,16 +4,23 @@ name: Auto-release
 # release: creates the matching v<version> tag and runs the same e2e-gated
 # release pipeline (release.yaml) a manual tag push would.
 #
+# manifest.json carries *exactly* the version being released, rc suffix
+# included — one rule for both release kinds: bumping it to "2.1.0-rc1"
+# cuts a prerelease (no ":latest" retag, marked prerelease on GitHub so
+# HACS only offers it to beta opt-ins); bumping it to "2.1.0" cuts the
+# final. The suffix must live in the manifest because release.yaml
+# requires tag and manifest to agree exactly — if the manifest carried the
+# bare base version during an rc phase, the bump that put it on master
+# would already have auto-released the final here, making rcs unreachable.
+#
 # The trigger is "the version *changed in this push*", deliberately not
-# "no tag exists for the current version": manifest.json already carries
-# the *next* planned version long before it's ready to ship (it says 2.0.0
-# today while the hardware-validation gate still holds it to rc
-# prereleases — see CONTRIBUTING.md), so a tag-absence check would have
-# cut a final release on the first merge after this workflow landed.
-# Releasing therefore stays a deliberate act — a PR that bumps the version
-# — with only the tag/build/gate/publish mechanics automated. Prereleases
-# (v2.0.0-rc1 style) remain manual tag pushes; manifest.json never carries
-# a prerelease suffix.
+# "no tag exists for the current version": the manifest was allowed to
+# pre-claim 2.0.0 before this automation (and the exact-match rule)
+# existed, while the hardware-validation gate holds releases to rc
+# prereleases (see CONTRIBUTING.md) — a tag-absence check would have cut
+# that final on the first merge after this workflow landed. Releasing
+# therefore stays a deliberate act — a PR that bumps the version — with
+# only the tag/build/gate/publish mechanics automated.
 on:
   push:
     branches:

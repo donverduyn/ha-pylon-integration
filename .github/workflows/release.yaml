@@ -1,12 +1,12 @@
 name: Release
 
-# Runs for a version tag either pushed by hand (v2.0.0-rc1 style
-# prereleases stay a manual act) or created by autorelease.yaml when a
-# manifest.json version bump lands on master. The two entry points exist
-# because tags created with the built-in GITHUB_TOKEN deliberately do not
-# trigger other workflows — autorelease must call this one directly
-# (workflow_call, passing the tag as an input) rather than relying on its
-# just-created tag firing the push trigger below.
+# Runs for a version tag created by autorelease.yaml when a manifest.json
+# version bump — rc or final — lands on master, or pushed by hand (kept as
+# an escape hatch; the bump-PR flow is the normal path for both). The two
+# entry points exist because tags created with the built-in GITHUB_TOKEN
+# deliberately do not trigger other workflows — autorelease must call this
+# one directly (workflow_call, passing the tag as an input) rather than
+# relying on its just-created tag firing the push trigger below.
 #
 # Builds the sidecar image with the tag baked in as SIDECAR_VERSION and the
 # triggering commit as GIT_SHA (see docker/Dockerfile's ARGs and
@@ -45,17 +45,16 @@ jobs:
 
       - name: Derive version from tag
         id: version
-        # Anything with a hyphen (e.g. v2.0.0-rc1) is a pre-release —
-        # real-hardware validation gaps mean nothing ships as a final
-        # release until that's been done (see CONTRIBUTING.md). base_version
-        # strips that suffix for comparison against manifest.json, which only
-        # ever carries the plain release number a prerelease is a candidate for.
+        # Anything with a hyphen (e.g. v2.0.0-rc1) is a pre-release: it
+        # skips the ":latest" retag below and its GitHub Release is marked
+        # prerelease, so HACS only offers it to users who opted into betas.
+        # Real-hardware validation gaps mean nothing ships as a final
+        # release until that's been done (see CONTRIBUTING.md).
         env:
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
           version="${tag#v}"
-          base_version="${version%%-*}"
           if [[ "${version}" == *-* ]]; then
             is_prerelease=true
           else
@@ -64,15 +63,24 @@ jobs:
           {
             echo "tag=${tag}"
             echo "version=${version}"
-            echo "base_version=${base_version}"
             echo "is_prerelease=${is_prerelease}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Verify tag matches manifest version
+        # Exact match, rc suffix included: manifest.json carries precisely
+        # the version being released ("2.0.0-rc2" during an rc phase,
+        # "2.0.0" for the final — AwesomeVersion parses both as valid
+        # SemVer, so hassfest accepts the suffix). The installed
+        # integration therefore self-reports exactly what it is, and a tag
+        # can never ship a manifest claiming to be some other version.
+        # This is also what makes the rc phase reachable at all under
+        # autorelease.yaml: if the manifest carried the bare base version
+        # during rcs, the bump that put it on master would already have
+        # auto-released the final.
         run: |
           manifest_version="$(jq -r .version custom_components/pylontech_mqtt/manifest.json)"
-          if [ "${{ steps.version.outputs.base_version }}" != "$manifest_version" ]; then
-            echo "::error::Tag ${{ steps.version.outputs.tag }} (base version ${{ steps.version.outputs.base_version }}) does not match manifest.json version ${manifest_version}"
+          if [ "${{ steps.version.outputs.version }}" != "$manifest_version" ]; then
+            echo "::error::Tag ${{ steps.version.outputs.tag }} (version ${{ steps.version.outputs.version }}) does not match manifest.json version ${manifest_version}"
             exit 1
           fi
 
