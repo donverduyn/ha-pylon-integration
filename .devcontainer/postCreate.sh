@@ -40,8 +40,11 @@ done < "$(dirname "$0")/agent-config-files.txt"
 # auth flows; without it, browser launches silently fail even though $BROWSER is set.
 # inotify-tools provides inotifywait, which syncAgentConfigOut.sh (postStartCommand)
 # uses to push .claude.json out to the host the moment it changes instead of polling.
+# mosquitto is the real broker tests/test_sidecar_e2e.py runs against — CI
+# installs it too (see .github/workflows/tests.yaml); without it those e2e
+# tests silently skip locally and only fail for the first time in CI.
 sudo apt-get update
-sudo apt-get install -y xdg-utils inotify-tools
+sudo apt-get install -y xdg-utils inotify-tools mosquitto
 
 npm install -g @openai/codex @kilocode/cli
 
