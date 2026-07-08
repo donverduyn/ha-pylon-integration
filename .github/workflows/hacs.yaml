@@ -43,18 +43,56 @@ jobs:
           else
             echo "is_release=true" >> "$GITHUB_OUTPUT"
           fi
+      - name: Refuse skip-ci on a release PR
+        # See tests.yaml's identical step for why: skip-ci on a confirmed
+        # release must not silently fall back to running the normal
+        # checks — it must fail loudly so whoever applied the label
+        # notices and removes it before this auto-releases unreviewed.
+        if: steps.check.outputs.is_release == 'true' && contains(github.event.pull_request.labels.*.name, 'skip-ci')
+        run: |
+          echo "::error::skip-ci cannot be applied to a release PR (manifest.json version changed against the base branch) — remove the label so the normal checks run before this auto-releases."
+          exit 1
 
   validate:
     runs-on: "ubuntu-latest"
     name: HACS Action
     needs: [detect-release]
-    # See tests.yaml's identical guard for why: the "skip-ci" PR label lets
-    # a maintainer fast-track a merge without waiting on this check, but
-    # only when detect-release confirms this isn't a release PR.
-    if: "needs.detect-release.outputs.is_release != 'false' || !contains(github.event.pull_request.labels.*.name, 'skip-ci')"
+    # always() unconditionally, then step-level `if:`s below decide what
+    # actually happens — this job is HACS Action, branch protection's
+    # actual required context, and it needs to be dispatched in every
+    # case (including a confirmed release, to hit its own bail step, and
+    # detect-release failing outright, to still fail closed to running
+    # the real steps) rather than relying on job-level `if:` filtering,
+    # which would only ever produce run-or-skip. A job-level `if:` here
+    # (even one that logically evaluates true) doesn't override GitHub's
+    # implicit "skip if needs failed" default unless it itself calls
+    # always()/success()/failure()/cancelled() — so without this, a
+    # detect-release failure (its own bail step or an unrelated flake)
+    # would silently skip this whole job before the step-level checks
+    # below ever ran, which is exactly the "silently skip instead of
+    # bailing loudly" bug this workflow exists to avoid.
+    if: always()
     steps:
+      - name: Refuse skip-ci on a release PR
+        # Duplicates detect-release's identical step (which only gives an
+        # early signal — its own pass/fail isn't required by branch
+        # protection) so *this* job explicitly fails instead of the
+        # checkout/validation steps below silently proceeding as if the
+        # label had been ignored, or (worse) silently skipping.
+        if: needs.detect-release.outputs.is_release == 'true' && contains(github.event.pull_request.labels.*.name, 'skip-ci')
+        run: |
+          echo "::error::skip-ci cannot be applied to a release PR — remove the label so this job runs normally before it auto-releases."
+          exit 1
       - uses: "actions/checkout@v4"
+        # Skips only in the one legitimate case: skip-ci is set AND
+        # detect-release confirmed this is NOT a release. Every other
+        # combination — no label, an unconfirmed verdict, or skip-ci on a
+        # confirmed release (caught by the bail step above, which fails
+        # this job before this step is ever reached) — still runs the
+        # real check below.
+        if: "!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == ''"
       - name: HACS validation
+        if: "!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == ''"
         uses: "hacs/action@d556e736723344f83838d08488c983a15381059a" # 22.5.0
         with:
           category: "integration"
