@@ -119,6 +119,10 @@ fi
 . "$tool_versions_file"
 : "${CODEX_VERSION:?missing CODEX_VERSION in tool-versions.env}"
 : "${KILO_VERSION:?missing KILO_VERSION in tool-versions.env}"
+: "${ACTIONLINT_VERSION:?missing ACTIONLINT_VERSION in tool-versions.env}"
+: "${ACTIONLINT_SHA256:?missing ACTIONLINT_SHA256 in tool-versions.env}"
+: "${HADOLINT_VERSION:?missing HADOLINT_VERSION in tool-versions.env}"
+: "${HADOLINT_SHA256:?missing HADOLINT_SHA256 in tool-versions.env}"
 
 # The devcontainers/features copilot-cli feature has no auto-update option
 # as of the pinned 1.1.3 feature metadata. It installs Copilot during image
@@ -186,6 +190,27 @@ while IFS='|' read -r relpath kind; do
       ;;
   esac
 done < "$script_dir/config-files.txt"
+
+# actionlint/hadolint versions+checksums are pinned in tool-versions.env --
+# the same source tests.yaml's meta-lint job installs them from (see that
+# job's identical curl+checksum steps) -- kept in sync by `make
+# update-deps` instead of two independently hand-maintained version/hash
+# pairs. Installed to /usr/local/bin rather than the .local/bin used for
+# opencode/kilo below: that path isn't guaranteed on PATH for every
+# shell/tool-invocation context (only a login shell's ~/.profile default
+# adds it), while /usr/local/bin always is -- and .pre-commit-config.yaml's
+# local/language:system hooks for both linters need to resolve them
+# regardless of how pre-commit itself gets invoked.
+curl -sSfLo /tmp/actionlint.tar.gz \
+  "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+echo "$ACTIONLINT_SHA256  /tmp/actionlint.tar.gz" | sha256sum -c
+tar xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+sudo install -m755 /tmp/actionlint /usr/local/bin/actionlint
+
+curl -sSfLo /tmp/hadolint \
+  "https://github.com/hadolint/hadolint/releases/download/v$HADOLINT_VERSION/hadolint-linux-x86_64"
+echo "$HADOLINT_SHA256  /tmp/hadolint" | sha256sum -c
+sudo install -m755 /tmp/hadolint /usr/local/bin/hadolint
 
 # Codex and Kilo versions are pinned in tool-versions.env. Rebuilds consume
 # those exact versions; `make update-deps` is the explicit
