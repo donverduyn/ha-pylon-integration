@@ -7,10 +7,13 @@
 #
 # Install with: pre-commit install
 repos:
-  # ruff and shellcheck-py are both pinned once, in requirements_dev.txt, not
-  # duplicated here as a mirror-repo `rev` — language: system runs the
-  # console script the project's own venv already has installed instead of
-  # pre-commit pulling a second, separately-versioned copy, so there's one
+  # ruff and shellcheck-py are pinned once, in requirements_dev.txt;
+  # actionlint/hadolint are pinned once, in .devcontainer/tool-versions.env
+  # (installed by postCreate.sh — see that script's identical comment).
+  # None of the four are duplicated here as a mirror-repo `rev` —
+  # language: system runs whichever binary the devcontainer already
+  # installed instead of pre-commit pulling a second, separately-versioned
+  # copy (or, for actionlint/hadolint, a Docker image), so there's one
   # source of truth per tool instead of two pins that can drift out of sync.
   - repo: local
     hooks:
@@ -31,15 +34,14 @@ repos:
         entry: shellcheck
         language: system
         types: [shell]
-
-  - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.12
-    hooks:
-      # Docker variant: no local Go toolchain/binary to install, just the
-      # Docker CLI this project's devcontainer already provides.
-      - id: actionlint-docker
-
-  - repo: https://github.com/hadolint/hadolint
-    rev: v2.14.0
-    hooks:
-      - id: hadolint-docker
+      - id: actionlint
+        name: Lint GitHub Actions workflow files
+        entry: actionlint
+        language: system
+        types: [yaml]
+        files: ^\.github/workflows/
+      - id: hadolint
+        name: Lint Dockerfiles
+        entry: hadolint
+        language: system
+        types: [dockerfile]

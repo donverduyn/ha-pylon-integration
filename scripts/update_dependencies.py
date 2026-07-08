@@ -9,6 +9,7 @@ pins, and regenerates lock files in one visible git diff.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html.parser
 import json
 import re
@@ -40,6 +41,21 @@ GITHUB_RELEASE_PINS: OrderedDict[str, str] = OrderedDict(
         ("GITHUB_CLI_VERSION", "cli/cli"),
         ("NVM_VERSION", "nvm-sh/nvm"),
         ("RIPGREP_VERSION", "BurntSushi/ripgrep"),
+    ]
+)
+
+# Unlike GITHUB_RELEASE_PINS above (consumed only as devcontainer feature
+# version *options*, which install and verify their own binary), these are
+# installed by a direct pinned curl download in both postCreate.sh and
+# tests.yaml's meta-lint job — so besides the version, this script also has
+# to pin and refresh the exact sha256 of the release asset those two
+# checksum-verify against. {version} in the asset template is substituted
+# with the resolved version (no "v" prefix, matching this repo's other
+# pins) before building the download URL.
+GITHUB_BINARY_PINS: OrderedDict[str, tuple[str, str]] = OrderedDict(
+    [
+        ("ACTIONLINT", ("rhysd/actionlint", "actionlint_{version}_linux_amd64.tar.gz")),
+        ("HADOLINT", ("hadolint/hadolint", "hadolint-linux-x86_64")),
     ]
 )
 
@@ -129,6 +145,18 @@ def latest_github_release_version(repository: str) -> str:
     )
     tag = str(data["tag_name"])
     return tag.removeprefix("v")
+
+
+def sha256_of_url(url: str) -> str:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "ha-pylontech-dependency-updater"},
+    )
+    digest = hashlib.sha256()
+    with urllib.request.urlopen(request, timeout=120) as response:
+        for chunk in iter(lambda: response.read(1 << 16), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def semver_key(version: str) -> tuple[int, int, int, tuple[str, ...]]:
@@ -308,6 +336,15 @@ def refresh_tool_versions(existing: OrderedDict[str, str]) -> OrderedDict[str, s
     for env_key, repository in GITHUB_RELEASE_PINS.items():
         values[env_key] = latest_github_release_version(repository)
         print(f"github {repository} -> {values[env_key]}")
+
+    for env_key, (repository, asset_template) in GITHUB_BINARY_PINS.items():
+        version = latest_github_release_version(repository)
+        asset = asset_template.format(version=version)
+        url = f"https://github.com/{repository}/releases/download/v{version}/{asset}"
+        sha256 = sha256_of_url(url)
+        values[f"{env_key}_VERSION"] = version
+        values[f"{env_key}_SHA256"] = sha256
+        print(f"github binary {repository} {asset} -> {version} {sha256}")
 
     node_major = int(values.get("NODE_VERSION", "22").split(".", 1)[0])
     values["NODE_VERSION"] = latest_node_version(node_major)

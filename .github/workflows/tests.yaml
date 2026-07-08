@@ -178,16 +178,28 @@ jobs:
     if: *skip_unless_real_check
     steps:
       - uses: "actions/checkout@v4"
-      - name: Install actionlint
-        # ubuntu-latest doesn't ship actionlint, unlike shellcheck below.
+      - name: Install actionlint and Hadolint
+        # ubuntu-latest doesn't ship either, unlike shellcheck below.
         # Downloaded and checksum-verified directly (pinned release asset)
         # rather than via a third-party wrapper action, to match this repo's
         # existing preference for pinned, minimal-trust-surface CI steps.
+        # Version+checksum come from tool-versions.env -- the same file
+        # postCreate.sh installs both from -- instead of a second,
+        # independently hand-maintained pair here; `make update-deps` keeps
+        # both in sync.
         run: |
+          # shellcheck disable=SC1091 # path is repo-local, read at CI runtime
+          . .devcontainer/tool-versions.env
+
           curl -sSfLo /tmp/actionlint.tar.gz \
-            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
-          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  /tmp/actionlint.tar.gz" | sha256sum -c
+            "https://github.com/rhysd/actionlint/releases/download/v$ACTIONLINT_VERSION/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "$ACTIONLINT_SHA256  /tmp/actionlint.tar.gz" | sha256sum -c
           tar xzf /tmp/actionlint.tar.gz -C /tmp actionlint
+
+          curl -sSfLo /tmp/hadolint \
+            "https://github.com/hadolint/hadolint/releases/download/v$HADOLINT_VERSION/hadolint-linux-x86_64"
+          echo "$HADOLINT_SHA256  /tmp/hadolint" | sha256sum -c
+          chmod +x /tmp/hadolint
       - name: actionlint
         run: /tmp/actionlint -color .github/workflows/*.yaml
       - name: ShellCheck
@@ -198,12 +210,6 @@ jobs:
             .devcontainer/postCreate.sh \
             .devcontainer/seedHostConfig.sh \
             .devcontainer/syncConfigOut.sh
-      - name: Install Hadolint
-        run: |
-          curl -sSfLo /tmp/hadolint \
-            https://github.com/hadolint/hadolint/releases/download/v2.14.0/hadolint-linux-x86_64
-          echo "6bf226944684f56c84dd014e8b979d27425c0148f61b3bd99bcc6f39e9dc5a47  /tmp/hadolint" | sha256sum -c
-          chmod +x /tmp/hadolint
       - name: Hadolint
         run: /tmp/hadolint docker/Dockerfile docker/Dockerfile.stub
 
