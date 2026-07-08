@@ -87,7 +87,16 @@ jobs:
     # *confirmed* release — still dispatches this job. See the top-of-file
     # comment and tests-status below for why a confirmed release doesn't
     # just skip quietly.
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == ''"
+    # The leading always() matters even though this job doesn't want to
+    # unconditionally run: a job's `if:` is implicitly ANDed with success()
+    # of its `needs` unless the condition itself calls always()/success()/
+    # failure()/cancelled() — without it, this job would silently be
+    # skipped by GitHub outright whenever detect-release fails for *any*
+    # reason (including its own explicit bail step above, but just as
+    # much a plain network flake), which is the opposite of "fails closed
+    # to running the checks". always() disables that implicit gating so
+    # the boolean logic here is what actually decides, in every case.
+    if: "always() && (!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == '')"
     strategy:
       fail-fast: false
       matrix:
@@ -149,7 +158,7 @@ jobs:
     runs-on: "ubuntu-latest"
     needs: [detect-release]
     # See pytest's identical condition/comment above.
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == ''"
+    if: "always() && (!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == '')"
     steps:
       - uses: "actions/checkout@v4"
       - uses: "astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39" # v8.2.0
@@ -199,7 +208,7 @@ jobs:
     runs-on: "ubuntu-latest"
     needs: [detect-release]
     # See pytest's identical condition/comment above.
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == ''"
+    if: "always() && (!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == '')"
     steps:
       - uses: "actions/checkout@v4"
       - name: Install actionlint
@@ -244,7 +253,7 @@ jobs:
     runs-on: "ubuntu-latest"
     needs: [detect-release]
     # See pytest's identical condition/comment above.
-    if: "!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == ''"
+    if: "always() && (!contains(github.event.pull_request.labels.*.name, 'skip-ci') || needs.detect-release.outputs.is_release == '')"
     steps:
       - uses: "actions/checkout@v4"
       - name: Build the sidecar image
