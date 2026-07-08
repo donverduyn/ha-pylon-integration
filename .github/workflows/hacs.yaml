@@ -79,47 +79,39 @@ jobs:
     runs-on: "ubuntu-latest"
     name: HACS Action
     needs: [detect-release]
-    # !cancelled() unconditionally (not always() — see tests.yaml's
-    # pytest job for why: always() would keep this job racing to
-    # completion even when detect-release was itself cancelled by a
-    # second triggering event superseding this whole run, burning real
-    # CI time on a result that's about to be discarded anyway), then
-    # step-level `if:`s below decide what actually happens — this job is
-    # HACS Action, branch protection's actual required context, and it
-    # needs to be dispatched in every case (including a confirmed
-    # release, to hit its own bail step, and detect-release genuinely
-    # failing, to still fail closed to running the real steps) rather
-    # than relying on job-level `if:` filtering, which would only ever
-    # produce run-or-skip. A job-level `if:` here (even one that
-    # logically evaluates true) doesn't override GitHub's implicit "skip
-    # if needs failed" default unless it itself calls always()/success()/
-    # failure()/cancelled() — so without this, a detect-release failure
-    # (its own bail step or an unrelated flake) would silently skip this
-    # whole job before the step-level checks below ever ran, which is
-    # exactly the "silently skip instead of bailing loudly" bug this
-    # workflow exists to avoid.
-    if: "!cancelled()"
+    # Skips at the job level (→ a real "skipped" conclusion, and — since
+    # hacs/action is a container action — avoids GitHub pre-pulling its
+    # image entirely, ~27s saved) in the one legitimate case: skip-ci is
+    # set AND detect-release confirmed this is NOT a release. Every other
+    # combination still dispatches the job: a confirmed release, to hit
+    # the bail step below (this job is HACS Action, branch protection's
+    # actual required context, so it has to fail *itself* here — a
+    # release PR reaching this condition always has skip_ci == 'false' or
+    # 'true' with is_release == 'true', never the 'false'+'false' pair
+    # this skips on); an unconfirmed verdict, to fail closed to running
+    # the real check below; and this run itself being cancelled (a second
+    # triggering event superseding it) is handled by !cancelled(), not by
+    # the boolean pair below — without it, a detect-release failure
+    # (genuine, or this run being cancelled) would silently skip this job
+    # via GitHub's implicit "skip if needs failed" default instead of
+    # reaching the logic that decides skip vs. bail vs. run for real.
+    if: "!cancelled() && !(needs.detect-release.outputs.skip_ci == 'true' && needs.detect-release.outputs.is_release == 'false')"
     steps:
       - name: Refuse skip-ci on a release PR
         # Duplicates detect-release's identical step (which only gives an
         # early signal — its own pass/fail isn't required by branch
         # protection) so *this* job explicitly fails instead of the
         # checkout/validation steps below silently proceeding as if the
-        # label had been ignored, or (worse) silently skipping.
+        # label had been ignored. No `if:` needed on checkout/validation
+        # below: this step failing already skips them via the default
+        # per-step success() requirement, and it's the only way this job
+        # gets dispatched without also being the real-check path.
         if: needs.detect-release.outputs.is_release == 'true' && needs.detect-release.outputs.skip_ci == 'true'
         run: |
           echo "::error::skip-ci cannot be applied to a release PR — remove the label so this job runs normally before it auto-releases."
           exit 1
       - uses: "actions/checkout@v4"
-        # Skips only in the one legitimate case: skip-ci is set AND
-        # detect-release confirmed this is NOT a release. Every other
-        # combination — no label, an unconfirmed verdict, or skip-ci on a
-        # confirmed release (caught by the bail step above, which fails
-        # this job before this step is ever reached) — still runs the
-        # real check below.
-        if: "needs.detect-release.outputs.skip_ci != 'true' || needs.detect-release.outputs.is_release == ''"
       - name: HACS validation
-        if: "needs.detect-release.outputs.skip_ci != 'true' || needs.detect-release.outputs.is_release == ''"
         uses: "hacs/action@d556e736723344f83838d08488c983a15381059a" # 22.5.0
         with:
           category: "integration"
