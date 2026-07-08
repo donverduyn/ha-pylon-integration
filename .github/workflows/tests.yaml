@@ -125,29 +125,6 @@ jobs:
           pytest --cov=custom_components --cov=docker
           --cov-report=term-missing --cov-fail-under=88
 
-  pytest-status:
-    # Branch protection needs one fixed required-status-check context, but
-    # pytest above is matrixed — a job-level skip never expands the matrix,
-    # so it never posts under "pytest (current)"/"pytest (min)" (those
-    # literal names only come into existence once the matrix actually
-    # runs). Without this, a skip-ci PR would sit permanently blocked: the
-    # exact contexts branch protection is waiting on would simply never
-    # appear. This job runs unconditionally (always(), no skip-ci check of
-    # its own) but does no real work — it just passes through pytest's
-    # result under a name that doesn't depend on the matrix, so branch
-    # protection can require *this* instead of the two per-version ones.
-    runs-on: "ubuntu-latest"
-    needs: [pytest]
-    if: always()
-    steps:
-      - name: Check pytest matrix result
-        run: |
-          result="${{ needs.pytest.result }}"
-          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
-            echo "::error::pytest matrix result was '$result'"
-            exit 1
-          fi
-
   lint:
     runs-on: "ubuntu-latest"
     needs: [detect-release]
@@ -359,17 +336,33 @@ jobs:
           E2E_SIDECAR_IMAGE: pylon2mqtt:ci
         run: pytest -m e2e
 
-  e2e-status:
-    # See pytest-status above for why this exists — same problem, same
-    # fix, for e2e's matrix.
+  tests-status:
+    # Branch protection needs one fixed required-status-check context per
+    # workflow (mirroring hacs.yaml/hassfest.yaml, which each only have one
+    # job and so already look like this for free). tests.yaml has five jobs,
+    # two of them matrixed (pytest, e2e) — a job-level skip never expands a
+    # matrix, so a skipped pytest/e2e never posts under
+    # "pytest (current)"/"pytest (min)"/"e2e (current)"/"e2e (min)" (those
+    # literal names only come into existence once the matrix actually
+    # runs), which would leave a skip-ci PR permanently blocked waiting on
+    # names that never appear. This job runs unconditionally (always(), no
+    # skip-ci check of its own), does no real work, and just checks that
+    # every real job's result was success or skipped — needs.e2e.result
+    # (and pytest's) already collapses both matrix legs into one verdict
+    # automatically. Branch protection requires *this* single name instead
+    # of the seven individual ones above.
+    name: Tests
     runs-on: "ubuntu-latest"
-    needs: [e2e]
+    needs: [pytest, lint, docker-build, meta-lint, e2e]
     if: always()
     steps:
-      - name: Check e2e matrix result
+      - name: Check all required jobs passed or were skipped
         run: |
-          result="${{ needs.e2e.result }}"
-          if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
-            echo "::error::e2e matrix result was '$result'"
-            exit 1
-          fi
+          for r in "${{ needs.pytest.result }}" "${{ needs.lint.result }}" \
+                   "${{ needs.docker-build.result }}" "${{ needs.meta-lint.result }}" \
+                   "${{ needs.e2e.result }}"; do
+            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+              echo "::error::a required job did not pass (result: $r)"
+              exit 1
+            fi
+          done
