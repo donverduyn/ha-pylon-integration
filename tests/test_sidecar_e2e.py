@@ -16,9 +16,10 @@ Python 3.11 while every check ran 3.13), /data write failures for the
 non-root user, and PID-1 signal handling.
 
 Requires a Docker daemon with the compose plugin; skipped automatically if
-`docker` isn't on PATH. Works both on a plain host (CI) and from inside a
-devcontainer using docker-outside-of-docker — see _broker_host() for the
-one place that difference leaks in.
+that isn't available (see _docker_unavailable_reason()). Works both on a
+plain host (CI) and from inside a devcontainer using
+docker-outside-of-docker — see _broker_host() for the one place that
+difference leaks in.
 
 Marked "e2e" and excluded from the default `pytest` run (see addopts in
 pyproject.toml). CI runs this after building the image, in tests.yaml's
@@ -40,11 +41,38 @@ import pytest
 import pytest_socket
 from paho.mqtt.enums import CallbackAPIVersion
 
+
+def _docker_unavailable_reason() -> str | None:
+    """None if the docker daemon and compose plugin are both reachable.
+
+    Checking only `shutil.which("docker")` proves the CLI is on PATH, not
+    that these tests can actually run — on a host with the CLI installed but
+    the daemon stopped/unreachable, or without the compose plugin, that lets
+    collection proceed and then fails at runtime instead of skipping
+    cleanly. `docker info` requires a live daemon connection; `docker
+    compose version` only checks the plugin is installed, not the daemon, so
+    both are needed.
+    """
+    if shutil.which("docker") is None:
+        return "requires the 'docker' CLI on PATH"
+    for cmd, what in (
+        (["docker", "info"], "a running Docker daemon"),
+        (["docker", "compose", "version"], "the Docker compose plugin"),
+    ):
+        try:
+            subprocess.run(cmd, capture_output=True, timeout=10, check=True)
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return f"requires {what}"
+    return None
+
+
+_DOCKER_UNAVAILABLE_REASON = _docker_unavailable_reason()
+
 pytestmark = [
     pytest.mark.e2e,
     pytest.mark.skipif(
-        shutil.which("docker") is None,
-        reason="requires the 'docker' CLI (with the compose plugin) on PATH",
+        _DOCKER_UNAVAILABLE_REASON is not None,
+        reason=_DOCKER_UNAVAILABLE_REASON or "",
     ),
 ]
 
