@@ -48,7 +48,14 @@ script_dir=$(dirname "$0")
 # syncConfigOut.sh guards itself with a pidfile, so postStartCommand's later
 # invocation of the same script is just a no-op once this one is already
 # running.
-nohup bash "$script_dir/syncConfigOut.sh" > /tmp/sync-agent-config-out.log 2>&1 &
+#
+# setsid, not just nohup: postCreateCommand runs as its own exec session
+# same as postStartCommand does, and nohup alone only blocks SIGHUP -- a
+# group-wide signal on that session's teardown could still take a bare
+# nohup'd child down with it (see devcontainer.json's postStartCommand for
+# where this was confirmed live). setsid detaches into a new session/process
+# group so nothing that only signals the old group can reach it.
+setsid nohup bash "$script_dir/syncConfigOut.sh" > /tmp/sync-config-out.log 2>&1 < /dev/null &
 
 # Mounted from this project's host-side sync directory so VS Code Local
 # History survives devcontainer rebuilds. Docker can create bind mount
