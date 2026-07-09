@@ -30,10 +30,10 @@
       "version": "2.96.0"
     },
     "ghcr.io/devcontainers-extra/features/claude-code:2": {
-      "version": "2.1.204"
+      "version": "2.1.205"
     },
     "ghcr.io/devcontainers-extra/features/opencode:1": {
-      "version": "1.17.15"
+      "version": "1.17.17"
     },
     "ghcr.io/devcontainers-extra/features/uv:1": {
       "version": "0.11.28"
