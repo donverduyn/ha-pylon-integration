@@ -1231,9 +1231,9 @@ home-assistant-intents==2025.3.28 \
     --hash=sha256:14f589a5a188f8b0c52f06ff8998c171fda25f8729de7a4011636295d90e7295 \
     --hash=sha256:3b93717525ae738f9163a2215bb0628321b86bd8418bfd64e1d5ce571b84fef4
     # via homeassistant
-homeassistant==2025.4.0 \
-    --hash=sha256:b1159c123b97fe372feadbe505cf920b87fbcd932177e5c0c86a6f6b3c6ee1b9 \
-    --hash=sha256:c1f9702e4a935da061d5f95254d25c039282862a510b3643ee76fb55a2b610f3
+homeassistant==2026.6.0 \
+    --hash=sha256:12ee6850604a0ab219932c8b7e64c96c7c4e0bb4c3f501e38cda63b1c80f2bf2 \
+    --hash=sha256:e6bf4721bb6db5d69998096c824da76cae23cd0ef3617982516d1e466ff33421
     # via pytest-homeassistant-custom-component
 httpcore==1.0.9 \
     --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \

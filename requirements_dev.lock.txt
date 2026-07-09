@@ -1367,9 +1367,9 @@ home-assistant-bluetooth==2.0.0 \
     --hash=sha256:3febd16b194812b156024d9bc8ce8ec7622cdd8d159047cac504cc77ca034ea1 \
     --hash=sha256:8d7c2ac48c303adacad73cb6cdfe7710f2fccd2a367d4c3106acf301b0d22b91
     # via homeassistant
-homeassistant==2026.7.1 \
-    --hash=sha256:6e5daf937b2f0909fb6645deb9091b14c9ac68f8d6fb5bf7314ae8e3dacb7a0d \
-    --hash=sha256:fbe1dbfd95d786a9dfef03b39a2e649843451ea84b6af6452628d114c42ef4b8
+homeassistant==2026.6.0 \
+    --hash=sha256:12ee6850604a0ab219932c8b7e64c96c7c4e0bb4c3f501e38cda63b1c80f2bf2 \
+    --hash=sha256:e6bf4721bb6db5d69998096c824da76cae23cd0ef3617982516d1e466ff33421
     # via pytest-homeassistant-custom-component
 httpcore==1.0.9 \
     --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \
