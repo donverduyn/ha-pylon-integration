@@ -62,7 +62,8 @@ def _declared_dir_mount_relpaths(config: dict) -> set[str]:
     for m in config["mounts"]:
         parts = dict(kv.split("=", 1) for kv in m.split(",") if "=" in kv)
         target = parts.get("target", "")
-        if parts.get("type") == "bind" and target.startswith(prefix) and target.endswith("/"):
+        is_bind = parts.get("type") == "bind"
+        if is_bind and target.startswith(prefix) and target.endswith("/"):
             relpaths.add(target[len(prefix) : -1])
     return relpaths
 
@@ -115,7 +116,9 @@ def test_file_target_bind_mount_without_trailing_slash_is_not_a_directory(tmp_pa
     ("jsonc", "expected"),
     [
         pytest.param('{"a": 1}', {"a": 1}, id="plain_json_passthrough"),
-        pytest.param('{\n  // comment\n  "a": 1\n}', {"a": 1}, id="line_comment_stripped"),
+        pytest.param(
+            '{\n  // comment\n  "a": 1\n}', {"a": 1}, id="line_comment_stripped"
+        ),
         pytest.param('{"a": 1,}', {"a": 1}, id="trailing_comma_object"),
         pytest.param('{"a": [1, 2,]}', {"a": [1, 2]}, id="trailing_comma_array"),
         pytest.param(
@@ -134,7 +137,7 @@ def test_file_target_bind_mount_without_trailing_slash_is_not_a_directory(tmp_pa
             id="brackets_inside_string_preserved",
         ),
         pytest.param(
-            "{/* block\ncomment spanning\nlines */ \"a\": 1}",
+            '{/* block\ncomment spanning\nlines */ "a": 1}',
             {"a": 1},
             id="multiline_block_comment_stripped",
         ),

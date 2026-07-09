@@ -49,7 +49,8 @@ def _relpaths() -> list[str]:
 
 def _staged_path(fake_home: Path, project_dir: Path, relpath: str) -> Path:
     # Mirrors seedHostConfig.sh's own sync_dir="$home/.devcontainer-agent-sync$PWD".
-    return fake_home / ".devcontainer-agent-sync" / str(project_dir).lstrip("/") / relpath
+    sync_dir = fake_home / ".devcontainer-agent-sync"
+    return sync_dir / str(project_dir).lstrip("/") / relpath
 
 
 def _run_seed(fake_home: Path, project_dir: Path) -> None:
