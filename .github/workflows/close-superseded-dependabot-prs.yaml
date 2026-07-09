@@ -27,7 +27,7 @@ jobs:
   close-superseded:
     runs-on: "ubuntu-latest"
     permissions:
-      contents: read
+      contents: write
       actions: read
       pull-requests: write
     steps:
@@ -66,8 +66,16 @@ jobs:
 
             if [ "$matched" = "1" ]; then
               echo "PR #$pr matches the known min-HA-version-floor conflict — closing."
-              gh pr close "$pr" --repo "$REPO" --delete-branch --comment \
+              gh pr close "$pr" --repo "$REPO" --comment \
                 "Closing automatically: this PR's CI failure is the known conflict between an isolated single-package bump and the frozen \`requirements_dev_min.txt\`/hacs.json HA-version floor — a transitive pin from that floor's homeassistant release disagrees with the version this PR wants. \`dependency-updates.yaml\`/\`min-ha-version-update.yaml\` resolve the whole dependency set together with \`uv\` on their own weekly schedule and supersede single-package bumps like this one; Dependabot will reopen or recreate this PR on its own if the conflict is somehow still unresolved after those run."
+              # Best-effort: Dependabot-owned branches sometimes can't be
+              # deleted by another actor even with contents: write, so this
+              # must never abort the loop the way `gh pr close --delete-branch`
+              # failing partway through did the first time this ran.
+              head_ref="$(gh pr view "$pr" --repo "$REPO" --json headRefName -q .headRefName)"
+              gh api "repos/$REPO/git/refs/heads/$head_ref" -X DELETE >/dev/null 2>&1 \
+                && echo "Deleted branch $head_ref." \
+                || echo "Could not delete branch $head_ref (leaving it; PR is already closed)."
             else
               echo "PR #$pr: no matching conflict signature found, leaving open."
             fi
