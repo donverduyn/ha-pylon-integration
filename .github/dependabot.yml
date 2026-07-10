@@ -18,6 +18,25 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 0
+    # Bundles every currently-available security update (that survives the
+    # ignore list below) into one PR instead of one PR per package.
+    # Dependabot resolves the whole group together before opening it, so
+    # it already verifies the bundle is mutually installable — the same
+    # kind of check uv pip compile does for our own lockfiles — rather
+    # than us discovering cross-package incompatibility after the fact by
+    # merging several independent PRs in sequence. Trade-off: if the
+    # bundle fails *our* CI (a real behavioral incompatibility Dependabot's
+    # resolution check can't see), the whole group is blocked together,
+    # not just the offending package — accepted because everything this
+    # applies to is dev-scope (see the ignore list's own comment), and
+    # close-stale-automation-prs.yaml already closes a stuck PR after 7
+    # days regardless of cause, so a bad group self-clears rather than
+    # blocking forever.
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
     ignore:
       # Every one of these is an exact upstream pin from either
       # homeassistant or pytest-homeassistant-custom-component itself
