@@ -59,6 +59,14 @@
   },
   "containerEnv": {
     "VIRTUAL_ENV": "/home/vscode/.venv",
+    // Without this, uv defaults to ~/.cache/uv, which lives in the
+    // container's own writable layer, not on the bind-mounted directory
+    // below -- so it would be wiped on every rebuild same as the venv
+    // itself, and postCreate.sh's `uv pip install` would re-download every
+    // wheel from PyPI each time instead of reusing what's already on disk.
+    // Pointing it at the mounted path (see "mounts" below) is what makes
+    // the cache actually survive a rebuild.
+    "UV_CACHE_DIR": "/home/vscode/.cache/uv",
     // The claude-code feature installs a pinned version, but the CLI itself
     // still self-updates in the background at container start regardless
     // (confirmed in practice via ~/.claude/.last-update-result.json showing a
@@ -159,6 +167,18 @@
     // above, now scoped per-project like everything else instead of one
     // mount shared globally across every project and the host.
     "source=${localEnv:HOME}${localEnv:USERPROFILE}/.devcontainer-agent-sync${localWorkspaceFolder}/.copilot/,target=/home/vscode/.copilot/,type=bind",
+    // Not an AI CLI, but the same rebuild-persistence problem as everything
+    // above: postCreate.sh recreates the venv from scratch on every
+    // rebuild (see that script), and uv's download/build cache normally
+    // lives in the container's own writable layer, so without this mount
+    // that work is thrown away and repeated in full on every rebuild too.
+    // Directory bind mount for the same reason as the rest of this list --
+    // no single-file rename hazard here, but reusing the same
+    // seed-once/live-mount machinery (config-files.txt, seedHostConfig.sh,
+    // postCreate.sh's ownership fix) is simpler than a bespoke path just
+    // for this one. containerEnv's UV_CACHE_DIR above points uv at this
+    // exact path.
+    "source=${localEnv:HOME}${localEnv:USERPROFILE}/.devcontainer-agent-sync${localWorkspaceFolder}/.cache/uv/,target=/home/vscode/.cache/uv/,type=bind",
     // VS Code Local History lives under the remote server's user-data tree,
     // which is otherwise part of the container overlay and disappears when
     // the devcontainer is rebuilt. The mount target deliberately is NOT a
