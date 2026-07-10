@@ -25,7 +25,15 @@ name: Auto-release
 # only the build/publish mechanics automated. No tests run downstream of
 # here: every commit on master already passed the full unit → build →
 # e2e pipeline on its PR (see tests.yaml), enforced by branch
-# protection's required status checks.
+# protection's required status checks — *unless* that PR carried the
+# skip-ci label, in which case none of those checks actually ran (a
+# skipped required job still satisfies branch protection). CodeQL
+# (codeql.yml) isn't skip-ci-gated and always scans every push to master,
+# but is advisory-only there — nothing stops a fast-tracked PR from
+# merging before anyone's looked at its result. security-gate below is
+# what actually enforces it: the one place release-bound code is
+# guaranteed to be checked for known-high-severity issues before it
+# ships, regardless of how it got onto master.
 on:
   push:
     branches:
@@ -74,9 +82,88 @@ jobs:
             echo "tag=$tag"
           } >> "$GITHUB_OUTPUT"
 
-  release:
+  security-gate:
     needs: detect
     if: needs.detect.outputs.release == 'true'
+    runs-on: "ubuntu-latest"
+    permissions:
+      security-events: read
+      actions: read
+    steps:
+      - name: Wait for CodeQL to finish analyzing this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        # codeql.yml triggers on this exact "push: master" event too, as a
+        # separate, independent workflow — there's no built-in ordering
+        # between separate workflow files, so its check-runs for this SHA
+        # may not exist yet, or may still be running, when this job starts.
+        # Poll rather than assume a fixed delay is enough (recent runs
+        # finish in ~1 minute, but that's not a guarantee). Times out
+        # loudly (see the step below and the top-of-file comment on why
+        # this job exists) rather than silently letting the release
+        # proceed without a known scan result.
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 600 ))
+          while true; do
+            runs="$(gh api "repos/$REPO/commits/$SHA/check-runs" --jq '[.check_runs[] | select(.name | startswith("Analyze ("))]')"
+            count="$(echo "$runs" | jq 'length')"
+            pending="$(echo "$runs" | jq '[.[] | select(.status != "completed")] | length')"
+            if [ "$count" -ge 1 ] && [ "$pending" = "0" ]; then
+              echo "$runs" | jq -r '.[] | "\(.name): \(.conclusion)"'
+              failed="$(echo "$runs" | jq '[.[] | select(.conclusion != "success")] | length')"
+              if [ "$failed" != "0" ]; then
+                echo "::error::CodeQL analysis failed for $SHA — refusing to release until it's green."
+                exit 1
+              fi
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::error::Timed out waiting for CodeQL to finish analyzing $SHA (found $count run(s), $pending still pending) — refusing to release without a known scan result."
+              exit 1
+            fi
+            echo "Waiting for CodeQL ($count found, $pending pending)..."
+            sleep 15
+          done
+
+      - name: Refuse release if master has an open high/critical CodeQL alert
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        # Checks *all* currently-open high/critical alerts on master, not
+        # just ones newly introduced by this push — an old alert that
+        # slipped in via a skip-ci merge, or one newly surfaced by the
+        # weekly scheduled scan picking up an updated CodeQL query pack
+        # (see codeql.yml), should block a release exactly as much as one
+        # this commit just introduced.
+        run: |
+          set -euo pipefail
+          # --jq '.[]' (rather than a `[...]`-wrapped filter) matters under
+          # --paginate: it emits one alert object per line across all pages,
+          # which `jq -s` below can slurp into a single array regardless of
+          # how many pages came back — a `[...]`-wrapped filter would instead
+          # print one array *per page*, concatenated as separate top-level
+          # JSON values that `jq length` can't sum correctly.
+          alerts="$(gh api "repos/$REPO/code-scanning/alerts?ref=refs/heads/master&state=open" --paginate --jq '.[]' \
+            | jq -s '[.[] | select(.rule.security_severity_level == "high" or .rule.security_severity_level == "critical")]')"
+          count="$(echo "$alerts" | jq 'length')"
+          if [ "$count" != "0" ]; then
+            echo "$alerts" | jq -r '.[] | "#\(.number) [\(.rule.security_severity_level)] \(.rule.description) — \(.html_url)"'
+            echo "::error::$count open high/critical CodeQL alert(s) on master — refusing to release until resolved or dismissed."
+            exit 1
+          fi
+          echo "No open high/critical CodeQL alerts on master."
+
+  release:
+    needs: [detect, security-gate]
+    # security-gate's own result (not just detect's output) has to be
+    # checked explicitly here: an explicit `if:` on a job replaces the
+    # implicit "all needs succeeded" gating GitHub Actions would otherwise
+    # apply, so without this it would still run even if security-gate
+    # failed.
+    if: needs.detect.outputs.release == 'true' && needs.security-gate.result == 'success'
     # The called workflow's own permission needs; a reusable workflow can
     # never exceed what the calling job grants.
     permissions:
