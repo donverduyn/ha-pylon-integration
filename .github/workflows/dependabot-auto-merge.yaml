@@ -18,9 +18,19 @@ name: Dependabot Auto-merge
 # passes tests-finished/HACS Action/validate, so `gh pr merge --auto` has
 # nothing to act on — it stays open (and pending) until
 # close-stale-automation-prs.yaml eventually retires it.
-
+#
+# pull_request_target, not pull_request: workflows triggered by a plain
+# pull_request event from a Dependabot-authored PR run with a read-only
+# GITHUB_TOKEN, regardless of what this file's own permissions: block
+# declares -- a hard GitHub platform restriction, not something workflow
+# config can override. gh pr merge --auto below needs write access, so
+# this has to be pull_request_target instead. Safe here specifically
+# because nothing in this job checks out or executes the PR's own code
+# (fetch-metadata and gh operate purely via the API/event context) --
+# pull_request_target's danger is normally running untrusted PR code with
+# privileged secrets, which never happens in this job.
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
 
 permissions: {}
