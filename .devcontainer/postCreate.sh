@@ -6,20 +6,6 @@ prepare_agent_sync() {
   sudo chown vscode:vscode "$HOME/.agent-sync"
 }
 
-disable_copilot_cli_auto_update() {
-  marker=/etc/devcontainer-copilot-cli/auto-update
-  if [ -f "$marker" ]; then
-    sudo rm -f "$marker"
-  fi
-}
-
-# The devcontainers/features copilot-cli feature has no auto-update option
-# as of the pinned 1.1.3 feature metadata. It installs Copilot during image
-# creation, then pays a postStart `copilot update` check on every start when
-# this marker exists. Remove it here; intentional latest refreshes are handled
-# by `make update-deps` and a rebuild.
-disable_copilot_cli_auto_update
-
 # /home/vscode/.agent-sync is a directory bind mount, staging just
 # .claude.json (see config-files.txt and seedHostConfig.sh for
 # why that one file alone still needs staging). Docker auto-creates its
@@ -27,6 +13,34 @@ disable_copilot_cli_auto_update
 # base image, so it needs its ownership fixed before anything below can
 # write into it.
 prepare_agent_sync
+
+# Same root-owned-ancestor problem as .agent-sync above, but for the shared
+# XDG-style parents of several mount targets: Docker auto-creates a bind
+# mount target's whole ancestor chain as root, and confirmed against the
+# base image (mcr.microsoft.com/devcontainers/python:3-3.14-trixie), only
+# ~/.config pre-exists there, vscode-owned -- ~/.local, ~/.local/share, and
+# ~/.local/state do not exist at all. So mounting .local/share/{opencode,kilo}
+# and .local/state/{opencode,kilo} (see devcontainer.json's "mounts") leaves
+# all three of those *parents* root-owned; full_ownership_walk (lib/fs.sh)
+# only fixes ownership inside each mount's own leaf target, never its
+# parents. That silently breaks anything else that later tries to create a
+# sibling as the vscode user -- confirmed in practice for `pnpm add -g`
+# below trying to create ~/.local/share/pnpm/bin, whose EACCES would abort
+# this whole script under `set -e` before the venv or any AI CLI ever got
+# installed.
+#
+# .local/share/pnpm/store gets the same explicit treatment here, not just
+# the ownership fix above: devcontainer.json mounts a named volume there
+# (see its "mounts" comment) so `pnpm add -g` below reuses already-downloaded
+# package content across rebuilds instead of re-fetching every AI CLI from
+# the npm registry every time. Docker creates that mount point the same
+# root-owned way if the volume is fresh and the path doesn't already exist
+# in the image, so it needs the same mkdir+chown as its siblings rather than
+# being left to the general .local/share fix above, which only reaches one
+# level deep.
+sudo mkdir -p "$HOME/.local/share" "$HOME/.local/state" "$HOME/.local/share/pnpm/store" || exit $?
+sudo chown vscode:vscode "$HOME/.local" "$HOME/.local/share" "$HOME/.local/state" \
+  "$HOME/.local/share/pnpm" "$HOME/.local/share/pnpm/store"
 
 script_dir=$(dirname "$0")
 # Absolute, unlike $script_dir above: this one gets written into .bashrc
@@ -55,8 +69,11 @@ if [ ! -f "$tool_versions_file" ]; then
 fi
 # shellcheck disable=SC1090 # path is repo-local and checked above
 . "$tool_versions_file"
+: "${CLAUDE_CODE_VERSION:?missing CLAUDE_CODE_VERSION in tool-versions.env}"
 : "${CODEX_VERSION:?missing CODEX_VERSION in tool-versions.env}"
+: "${COPILOT_CLI_VERSION:?missing COPILOT_CLI_VERSION in tool-versions.env}"
 : "${KILO_VERSION:?missing KILO_VERSION in tool-versions.env}"
+: "${OPENCODE_VERSION:?missing OPENCODE_VERSION in tool-versions.env}"
 : "${ACTIONLINT_VERSION:?missing ACTIONLINT_VERSION in tool-versions.env}"
 : "${ACTIONLINT_SHA256:?missing ACTIONLINT_SHA256 in tool-versions.env}"
 : "${HADOLINT_VERSION:?missing HADOLINT_VERSION in tool-versions.env}"
@@ -90,8 +107,8 @@ done < "$script_dir/config-files.txt"
 # Start the sync-out watcher only now, after the copy-in loop above has run
 # sync_config_in for every path in config-files.txt -- not "as early as
 # possible" like a prior version of this script did. Any of those paths can
-# ship a default placeholder baked into the image itself (the claude-code
-# feature's own install step does this for .claude.json -- confirmed in
+# ship a default placeholder baked into the image itself (a previously used
+# claude-code feature did this for .claude.json -- confirmed in
 # practice: `docker run --rm <this image> stat /home/vscode/.claude.json`
 # shows it present with a build-time mtime, before any postCreate.sh code
 # ever runs -- and it's present again on every rebuild that reuses that
@@ -140,33 +157,26 @@ curl -sSfLo /tmp/hadolint \
 echo "$HADOLINT_SHA256  /tmp/hadolint" | sha256sum -c
 sudo install -m755 /tmp/hadolint /usr/local/bin/hadolint
 
-# Codex and Kilo versions are pinned in tool-versions.env. Rebuilds consume
-# those exact versions; `make update-deps` is the explicit
-# operation that contacts npm and moves the pins.
+# All npm-distributed AI CLIs are constrained to major release lines in
+# tool-versions.env. Rebuilds resolve the newest compatible minor/patch;
+# `make update-deps` explicitly contacts npm and moves the major constraints.
 #
-# --allow-build is required, not cosmetic: both packages fetch a
-# platform-specific native binary via a postinstall script (visible above as
-# the "Downloading ..." lines), and pnpm 11's build-script approval gate
-# blocks those scripts by default. Without this flag the gate falls back to
-# an interactive "Choose which packages to build" picker gated on
-# stdin.isTTY (not on $CI), which hangs forever under devcontainer's
-# postCreateCommand -- confirmed in practice. --allow-build approves them
-# non-interactively regardless of whether a TTY is attached.
-#
-# The flag must be repeated once per package, not comma-joined: pnpm's CLI
-# parser treats each `--allow-build=` occurrence as one literal allow-list
-# entry and never splits on commas, so `--allow-build=a,b` registers a
-# single bogus entry named "a,b" that matches neither real package --
-# confirmed in practice via the resulting global pnpm-workspace.yaml
-# (`allowBuilds: {'a,b': true}`). @openai/codex has no gated postinstall so
-# it installs fine either way, which is why only @kilocode/cli's build
-# picker was ever seen hanging.
+# --allow-build approves the packages with native-binary postinstall scripts
+# through pnpm 11's otherwise interactive build-script gate. Repeat the flag
+# once per package: pnpm treats each occurrence as one literal allow-list entry.
+# Codex and Copilot do not currently declare gated postinstall scripts.
 pnpm add -g \
   --config.minimumReleaseAge=0 \
   --allow-build=@openai/codex \
+  --allow-build=@github/copilot \
+  --allow-build=@anthropic-ai/claude-code \
   --allow-build=@kilocode/cli \
+  --allow-build=opencode-ai \
+  "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION" \
   "@openai/codex@$CODEX_VERSION" \
-  "@kilocode/cli@$KILO_VERSION"
+  "@github/copilot@$COPILOT_CLI_VERSION" \
+  "@kilocode/cli@$KILO_VERSION" \
+  "opencode-ai@$OPENCODE_VERSION"
 
 # /usr/local's site-packages is root-owned, so deps can't install into the base image's
 # system Python as the vscode user. Use a uv-managed venv instead: uv is fast enough that
@@ -232,10 +242,8 @@ grep -qF 'node_modules/.bin' /home/vscode/.bashrc || echo 'export PATH="./node_m
 # opencode/kilo: both already use XDG home paths for normal config/data/
 # state, but their plugin command defaults to project-local config unless
 # --global is supplied -- defaulted here the same way, unless -g/--global
-# was already given. kilo itself is installed by this script's `pnpm
-# install -g` step above, not here -- unlike npm, pnpm never symlinks
-# global packages into the Node install it ran from, so it lands in pnpm's
-# own global bin dir.
+# was already given. All three binaries are installed by the `pnpm add -g`
+# step above and live in pnpm's global bin directory.
 #
 # The calls below are plain data (CLI name, real binary path, trigger
 # words, flags) -- no "$@" or other shell metacharacters -- so they're safe
@@ -247,8 +255,8 @@ grep -qF '# Devcontainer AI CLI home-config defaults' /home/vscode/.bashrc || ca
 
 # Devcontainer AI CLI home-config defaults
 . "$script_dir_abs/lib/cli.sh"
-_devcontainer_define_cli_shim claude /home/vscode/.local/bin/claude "mcp add|mcp add-json" -s --scope "--scope user" "--permission-mode auto"
-_devcontainer_define_cli_shim opencode /usr/local/bin/opencode "plugin|plug" -g --global --global ""
+_devcontainer_define_cli_shim claude /home/vscode/.local/share/pnpm/bin/claude "mcp add|mcp add-json" -s --scope "--scope user" "--permission-mode auto"
+_devcontainer_define_cli_shim opencode /home/vscode/.local/share/pnpm/bin/opencode "plugin|plug" -g --global --global ""
 _devcontainer_define_cli_shim kilo /home/vscode/.local/share/pnpm/bin/kilo "plugin|plug" -g --global --global ""
 EOF
 

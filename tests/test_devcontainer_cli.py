@@ -35,8 +35,8 @@ _ROOT = Path(__file__).parent.parent
 _LIB = _ROOT / ".devcontainer" / "lib" / "cli.sh"
 _POSTCREATE = _ROOT / ".devcontainer" / "postCreate.sh"
 
-_REAL_CLAUDE = "/home/vscode/.local/bin/claude"
-_REAL_OPENCODE = "/usr/local/bin/opencode"
+_REAL_CLAUDE = "/home/vscode/.local/share/pnpm/bin/claude"
+_REAL_OPENCODE = "/home/vscode/.local/share/pnpm/bin/opencode"
 _REAL_KILO = "/home/vscode/.local/share/pnpm/bin/kilo"
 
 

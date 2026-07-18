@@ -65,8 +65,8 @@
 
 9. **OpenCode & Kilo Code roles** — Investigate how they fit into agent
    workflows inside the container. Both are already installed and
-   persisted: `.devcontainer/tool-versions.env` pins `OPENCODE_VERSION` and
-   `KILO_VERSION`; `postCreate.sh` wires both binaries up via
+   persisted: `.devcontainer/tool-versions.env` constrains
+   `OPENCODE_VERSION` and `KILO_VERSION`; `postCreate.sh` wires both up via
    `.devcontainer/lib/cli.sh`'s generic `_devcontainer_define_cli_shim`
    factory so global plugin installs land in home-backed config instead of
    the image layer; `.devcontainer/config-files.txt` persists

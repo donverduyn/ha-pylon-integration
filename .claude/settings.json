@@ -5,8 +5,6 @@
       "Read(secrets.env.local)",
       "Edit(secrets.env)",
       "Edit(secrets.env.local)",
-      "Write(secrets.env)",
-      "Write(secrets.env.local)",
       "Grep(secrets.env)",
       "Grep(secrets.env.local)"
     ]

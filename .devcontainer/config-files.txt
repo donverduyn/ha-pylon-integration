@@ -1,8 +1,8 @@
 # Single source of truth for every path that needs to survive a container
-# rebuild via a live bind mount -- mostly AI CLI configs, plus the uv cache
-# below -- read by three scripts (host-side seedHostConfig.sh, container-side
-# postCreate.sh and syncConfigOut.sh) so the list is never duplicated. One
-# path per line, relative to $HOME.
+# rebuild via a live bind mount -- AI CLI configs -- read by three scripts
+# (host-side seedHostConfig.sh, container-side postCreate.sh and
+# syncConfigOut.sh) so the list is never duplicated. One path per line,
+# relative to $HOME.
 #
 # Whether a given path ends up bind-mounted (live, no copying needed) or
 # copied/synced (staged through .agent-sync) is decided at runtime, not by
@@ -43,8 +43,3 @@
 # GitHub Copilot CLI (session-store.db mixes login in with everything else
 # it stores, same reasoning as the other directories above)
 .copilot
-
-# uv package cache (not an AI CLI, but seeding/mounting it the same way
-# keeps postCreate.sh's venv install from re-downloading every wheel on
-# every rebuild -- see devcontainer.json's "mounts" and containerEnv)
-.cache/uv
