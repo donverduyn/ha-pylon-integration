@@ -192,8 +192,12 @@
   // `pnpm install -g` (Codex, Kilocode) puts its shims in
   // ~/.local/share/pnpm/bin, which (unlike npm's old global prefix) isn't on
   // PATH anywhere by default.
+  // .devcontainer/bin (this repo's own dev-tool shims, e.g. pylon_cli) rides along too, as an
+  // absolute path: a bare "./.devcontainer/bin" only resolves when cwd happens to be the
+  // workspace root, and only in interactive shells (see postCreate.sh's /etc/profile.d drop for
+  // the login-shell half of this same fix).
   "remoteEnv": {
-    "PATH": "/home/vscode/.venv/bin:/home/vscode/.local/share/pnpm/bin:/usr/local/share/nvm/current/bin:${containerEnv:PATH}"
+    "PATH": "/home/vscode/.venv/bin:/home/vscode/.local/share/pnpm/bin:/usr/local/share/nvm/current/bin:/workspaces/ha-pylontech-mqtt/.devcontainer/bin:${containerEnv:PATH}"
   },
   // Marker only: this makes the otherwise-silent handoff from the host-side
   // initializeCommand to the in-container lifecycle visible in rebuild logs.
