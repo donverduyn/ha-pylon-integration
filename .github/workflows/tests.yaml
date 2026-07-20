@@ -27,9 +27,16 @@ concurrency:
   # Stale PR/feature-branch runs can be cancelled. Preserve and queue every
   # master push so an autorelease always has a completed Tests run for its
   # exact commit, even when several merges land in quick succession.
+  #
+  # No queue: max here (unlike autorelease.yaml/release.yaml/
+  # dependabot-auto-merge.yaml's static cancel-in-progress: false): GitHub
+  # rejects the whole workflow file at validation time whenever
+  # cancel-in-progress isn't a literal `false`, and this one is a runtime
+  # expression that legitimately evaluates true off master -- confirmed by
+  # this exact combination failing every run on a feature branch outright
+  # (zero jobs scheduled) until queue: max was removed here.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
-  queue: max
 
 # Every real job below (pytest/lint/docker-build/meta-lint/e2e/
 # codeql-analyze) is gated on the "skip-ci" PR label so a maintainer can
