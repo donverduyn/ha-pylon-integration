@@ -219,6 +219,19 @@ sudo tee /etc/profile.d/01-pnpm.sh > /dev/null <<'EOF'
 export PATH="/home/vscode/.local/share/pnpm/bin:$PATH"
 EOF
 
+# Same login-shell problem again, but for this repo's own dev-tool shims
+# (.devcontainer/bin/pylon_cli, a symlink to scripts/pylon_cli.py). This used
+# to be a bare `./.devcontainer/bin` appended to ~/.bashrc, which had two
+# bugs: it only resolved when a shell's cwd happened to be the workspace
+# root, and ~/.bashrc opens with the standard "not interactive? return"
+# guard, so any non-interactive shell (scripts, CI, tool-runner shells) never
+# reached it at all. An absolute path in /etc/profile.d fixes both — same
+# fix as the venv/pnpm entries above, and mirrored into devcontainer.json's
+# remoteEnv for VS-Code-launched processes.
+sudo tee /etc/profile.d/02-devcontainer-bin.sh > /dev/null <<'EOF'
+export PATH="/workspaces/ha-pylontech-mqtt/.devcontainer/bin:$PATH"
+EOF
+
 # Lets locally-installed npm CLI tools (e.g. from devDependencies) run by name from an
 # interactive shell without npx/npm run. Deliberately only in .bashrc, not devcontainer.json's
 # remoteEnv or /etc/profile.d: PATH resolves "./node_modules/.bin" relative to cwd on every
@@ -226,14 +239,6 @@ EOF
 # user opens, not every process VS Code spawns in every directory.
 # shellcheck disable=SC2016 # $PATH must stay literal here — it's expanded later when .bashrc is sourced, not now
 grep -qF 'node_modules/.bin' /home/vscode/.bashrc || echo 'export PATH="./node_modules/.bin:$PATH"' >> /home/vscode/.bashrc
-
-# Same cwd-relative reasoning as node_modules/.bin above, for this repo's own
-# dev tools: .devcontainer/bin/pylon_cli (a symlink to scripts/pylon_cli.py,
-# the interactive BMS/stub console client) can then be run as a bare
-# `pylon_cli` from a terminal opened at the repo root, without
-# `python scripts/pylon_cli.py`.
-# shellcheck disable=SC2016 # $PATH must stay literal here — it's expanded later when .bashrc is sourced, not now
-grep -qF './.devcontainer/bin:' /home/vscode/.bashrc || echo 'export PATH="./.devcontainer/bin:$PATH"' >> /home/vscode/.bashrc
 
 # utils/cli.sh's _devcontainer_define_cli_shim (see that file) is a generic
 # factory: given a CLI name plus its trigger words, override flag, default

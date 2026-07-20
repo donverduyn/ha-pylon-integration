@@ -21,8 +21,8 @@ Usage
   # One-shot command, no REPL — prints the response and exits:
   pylon_cli --tcp 127.0.0.1:12300 pwr 1
 
-  # Serial (real hardware, or a scripts/pty_bridge.py PTY):
-  pylon_cli --serial /dev/pts/7 --baud 115200
+  # Serial (real hardware):
+  pylon_cli --serial /dev/ttyUSB0 --baud 115200
 
   # No connection flag: falls back to main.py's own environment variables
   # (CONNECTION_TYPE/TCP_HOST/TCP_PORT/SERIAL_PORT/BAUD_RATE), so an existing
